@@ -76,7 +76,6 @@ class EclairDialog(QDialog):
         # Add the QPushButton to the layout
         btn_action_import_pointsource = QPushButton("Dummy: Import pointsource")
         layout.addWidget(btn_action_import_pointsource)
-
         # Connect the button click event to a function in your plugin's code
         btn_action_import_pointsource.clicked.connect(self.import_pointsource_dialog)
 
@@ -108,10 +107,32 @@ class EclairDialog(QDialog):
         execute_from_command_line(sys.argv)
         from etk.edb.importers import import_pointsources
 
-        msg_box = QMessageBox()
-        msg_box.setWindowTitle("Test, not actually importing django yet")
-        msg_box.setText("test")
-        msg_box.exec_()
+        file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsource file", "", "Spreadsheet file (*.xlsx) or comma-separated (*.csv)")
+        if file_path:
+            ps = import_pointsources(file_path)
+            display_ps_import_progress(ps)
+        # opening 'etk/tests/edb/data/pointsources.csv'
+        # gives error django.db.utils.OperationalError: no such table: substances
+        # when executing in python console or within plugin,
+        # but when running same code from venv in terminal, does find substances table but only 
+        # complains: etk.edb.importers.ImportError: Unknown activitycode1 '1.3' on row 2
+        # could be related to not finding database file
+        # from django.conf import settings
+        # databases = settings.DATABASES
+        # print(databases) # to see that databases['default']['NAME'] is different for QGIS and terminal.
+        # database_path = os.path.abspath('/home/a002469/.config/eclair/eclair.sqlite')
+        # databases['default']['NAME'] = database_path
+
+        # to try from terminal, in python run
+        # import django
+        # import os
+        # import sys
+        # os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
+        # from django.core.management import execute_from_command_line
+        # execute_from_command_line(sys.argv)
+        # from etk.edb.importers import import_pointsources
+        # import_pointsources('/home/a002469/Projects/etk/tests/edb/data/pointsources.csv')
+
 
 def display_ps_import_progress(ps_progress):
     # For this example, let's display the file contents in a message box.
