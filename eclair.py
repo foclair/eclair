@@ -25,6 +25,8 @@
 from PyQt5.QtWidgets import QAction
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QPushButton, QLabel, QMessageBox
 from PyQt5.QtWidgets import QFileDialog
+from PyQt5.QtCore import QUrl
+from PyQt5.QtGui import QDesktopServices
 
 # from .etk.src.etk.edb.importers import import_pointsources
 
@@ -34,9 +36,22 @@ import os
 import sys
 import subprocess
 import site
+from pathlib import Path
 
-
-
+# from etk, can re-use from there?
+DEFAULT_SETTINGS = {
+    "DEBUG": False,
+    "INSTALLED_APPS": [
+        "django.contrib.gis",
+        "etk.edb.apps.EdbConfig",
+        "rest_framework",
+    ],
+    "DATABASE_ROUTERS": ["dynamic_db_router.DynamicDbRouter"],
+    "LANGUAGE_CODE": "en-us",
+    "TIME_ZONE": "UTC",
+    "USE_I18N": True,
+    "USE_TZ": True,
+}
 
 class Eclair:
     def __init__(self, iface):
@@ -84,11 +99,15 @@ class EclairDialog(QDialog):
         layout.addWidget(btn_action_import_django)
         btn_action_import_django.clicked.connect(self.import_django_dialog)
 
+        # connect the help button to our method
+        # do this with inspiration from plugin builder tool, has .ui file, will we need that?
+        # self.dialog.button_box.helpRequested.connect(self.show_help)
+
 
 
     def import_pointsource_dialog(self):
         # This function will be called when the button is clicked.
-        # You can define the desired action here.
+        # This is a dummy function just to show how file system can be accessed.
         file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsource file", "", "Spreadsheet file (*.xlsx) or comma-separated (*.csv)")
         if file_path:
             ps = str(file_path) #import_pointsources(file_path)
@@ -96,32 +115,58 @@ class EclairDialog(QDialog):
     
     
     def import_django_dialog(self):
-        # This function will be called when the button is clicked.
+        # This is a start to the actual import pointsource function
+        # currently cannot do initial migrate from QGIS, due to SQLite and SPatiaLite
+        # versions, see https://code.djangoproject.com/ticket/32935
+        
         # Determine the path to the virtual environment
         venv_path = os.path.join(os.path.dirname(__file__), '.venv')
         site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
 
         import django
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
-        from django.core.management import execute_from_command_line
-        execute_from_command_line(sys.argv)
+        from django.conf import settings
+        if hasattr(settings, "configured") and not settings.configured:
+            #alternative to setup, code mainly comes from etk, should be possible to re-use?
+            default_config_home = os.path.expanduser("~/.config")
+            config_home = Path(os.environ.get("XDG_CONFIG_HOME", default_config_home))
+            default_db = os.path.join(default_config_home,'eclair','eclair.sqlite')
+            db_path = os.environ.get("ETK_DATABASE_PATH", default_db)
+            settings.configure(
+                **DEFAULT_SETTINGS,
+                DATABASES={
+                "default": {
+                        "ENGINE": "django.contrib.gis.db.backends.spatialite",
+                        "NAME": db_path,
+                        "TEST": {"TEMPLATE": "eclair.sqlite"},
+                    },
+                }
+            )
+            django.setup()
+
+        # from django.core.management import execute_from_command_line
+        # execute_from_command_line(sys.argv)
+        from django.core.management import call_command
+        call_command('showmigrations')
+
+
         from etk.edb.importers import import_pointsources
 
         file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsource file", "", "Spreadsheet file (*.xlsx) or comma-separated (*.csv)")
         if file_path:
             ps = import_pointsources(file_path)
             display_ps_import_progress(ps)
-        # opening 'etk/tests/edb/data/pointsources.csv'
-        # gives error django.db.utils.OperationalError: no such table: substances
-        # when executing in python console or within plugin,
-        # but when running same code from venv in terminal, does find substances table but only 
-        # complains: etk.edb.importers.ImportError: Unknown activitycode1 '1.3' on row 2
-        # could be related to not finding database file
-        # from django.conf import settings
-        # databases = settings.DATABASES
-        # print(databases) # to see that databases['default']['NAME'] is different for QGIS and terminal.
-        # database_path = os.path.abspath('/home/a002469/.config/eclair/eclair.sqlite')
-        # databases['default']['NAME'] = database_path
+
+
+
+        # from io import StringIO
+        # output = StringIO()
+        # # Redirect sys.stdout to the captured_output
+        # sys.stdout = output
+        # django.db.connection.cursor().execute("SELECT InitSpatialMetaData(1)")
+        # output_string = output.getvalue()
+        # output.close()
+        # display_ps_import_progress(output_string)
 
         # to try from terminal, in python run
         # import django
@@ -132,6 +177,11 @@ class EclairDialog(QDialog):
         # execute_from_command_line(sys.argv)
         # from etk.edb.importers import import_pointsources
         # import_pointsources('/home/a002469/Projects/etk/tests/edb/data/pointsources.csv')
+    
+    def show_help(self):
+        """Display application help to the user."""
+        help_url = 'https://git.smhi.se/foclair/minimal-eclair/-/blob/develop/README.md'
+        QDesktopServices.openUrl(QUrl(help_url))
 
 
 def display_ps_import_progress(ps_progress):
@@ -140,6 +190,8 @@ def display_ps_import_progress(ps_progress):
     msg_box.setWindowTitle("Pointsource import progress")
     msg_box.setText(ps_progress)
     msg_box.exec_()
+
+
 
 
 
