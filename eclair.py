@@ -72,7 +72,6 @@ class Eclair:
         dialog = EclairDialog()
         dialog.exec_()
 
-
        
 class EclairDialog(QDialog):
     def __init__(self):
@@ -143,6 +142,48 @@ class EclairDialog(QDialog):
                 }
             )
             django.setup()
+        
+        def create_codesets():
+            from etk.edb.models.source_models import CodeSet, Domain
+            try:
+                domain = Domain.objects.get(slug='domain-1')
+            except etk.edb.models.source_models.Domain.DoesNotExist:
+                extent = (
+                    "MULTIPOLYGON ((("
+                    "10.95 50.33, 24.16 50.33, 24.16 69.06, 10.95 69.06, 10.95 50.33"
+                    ")))"
+                )
+                domain = Domain.objects.create(
+                    name="Domain 1",
+                    slug="domain-1",
+                    srid=3006,
+                    extent=extent,
+                    timezone="Europe/Stockholm",
+                )
+            try:
+                vertical_dist = domain.vertical_dists.get(name='vdist1')
+            except etk.edb.models.source_models.VerticalDist.DoesNotExist: 
+                vertical_dist = domain.vertical_dists.create(
+                    name="vdist1", weights="[[5.0, 0.4], [10.0, 0.6]]"
+                )
+
+            try:
+                CodeSet.objects.get(name="code set 1")
+            except etk.edb.models.source_models.CodeSet.DoesNotExist:
+                # similar to base_set in gadget
+                cs1 = CodeSet.objects.create(name="code set 1", slug="code_set1", domain=domain)
+                cs1.codes.create(code="1", label="Energy")
+                cs1.codes.create(
+                    code="1.1", label="Stationary combustion", vertical_dist=vertical_dist
+                )
+                cs1.codes.create(
+                    code="1.2", label="Fugitive emissions", vertical_dist=vertical_dist
+                )
+                cs1.codes.create(code="1.3", label="Road traffic", vertical_dist=vertical_dist)
+                cs1.save()
+                cs2 = CodeSet.objects.create(name="code set 2", slug="code_set2", domain=domain)
+                cs2.codes.create(code="A", label="Bla bla")
+                cs2.save()
 
         # from django.core.management import execute_from_command_line
         # execute_from_command_line(sys.argv)
@@ -151,11 +192,13 @@ class EclairDialog(QDialog):
 
 
         from etk.edb.importers import import_pointsources
-
+        import etk
+        create_codesets()
         file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsource file", "", "Spreadsheet file (*.xlsx) or comma-separated (*.csv)")
+        #TODO let user specify unit
         if file_path:
-            ps = import_pointsources(file_path)
-            display_ps_import_progress(ps)
+            ps = import_pointsources(file_path, unit="ton/year")
+            display_ps_import_progress(str(ps))
 
 
 
