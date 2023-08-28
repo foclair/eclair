@@ -194,7 +194,7 @@ class EclairDialog(QDialog):
         from etk.edb.importers import import_pointsources
         import etk
         create_codesets()
-        file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsource file", "", "Spreadsheet file (*.xlsx) or comma-separated (*.csv)")
+        file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsource file", "", "Spreadsheet files (*.xlsx);; Comma-separated files (*.csv)")
         #TODO let user specify unit
         if file_path:
             ps = import_pointsources(file_path, unit="ton/year")
