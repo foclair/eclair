@@ -88,32 +88,22 @@ class EclairDialog(QDialog):
         layout.addWidget(label)
 
         # Add the QPushButton to the layout
-        btn_action_import_pointsource = QPushButton("Dummy: Import pointsource")
+        btn_action_import_pointsource = QPushButton("Import pointsource")
         layout.addWidget(btn_action_import_pointsource)
-        # Connect the button click event to a function in your plugin's code
         btn_action_import_pointsource.clicked.connect(self.import_pointsource_dialog)
 
         # Add the QPushButton to the layout
-        btn_action_import_django = QPushButton("Under construction: actual Import pointsource")
-        layout.addWidget(btn_action_import_django)
-        btn_action_import_django.clicked.connect(self.import_django_dialog)
+        btn_action_import_pointsourceactivities = QPushButton("Import pointsourceactivities")
+        layout.addWidget(btn_action_import_pointsourceactivities)
+        btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsourceactivities_dialog)
 
         # connect the help button to our method
         # do this with inspiration from plugin builder tool, has .ui file, will we need that?
         # self.dialog.button_box.helpRequested.connect(self.show_help)
 
-
-
+    
+    
     def import_pointsource_dialog(self):
-        # This function will be called when the button is clicked.
-        # This is a dummy function just to show how file system can be accessed.
-        file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsource file", "", "Spreadsheet file (*.xlsx) or comma-separated (*.csv)")
-        if file_path:
-            ps = str(file_path) #import_pointsources(file_path)
-            display_ps_import_progress(ps)
-    
-    
-    def import_django_dialog(self):
         # This is a start to the actual import pointsource function
         # currently cannot do initial migrate from QGIS, due to SQLite and SPatiaLite
         # versions, see https://code.djangoproject.com/ticket/32935
@@ -200,6 +190,93 @@ class EclairDialog(QDialog):
             ps = import_pointsources(file_path, unit="ton/year")
             display_ps_import_progress(str(ps))
 
+    def import_pointsourceactivities_dialog(self):
+        # This is a start to the actual import pointsource function
+        # currently cannot do initial migrate from QGIS, due to SQLite and SPatiaLite
+        # versions, see https://code.djangoproject.com/ticket/32935
+        
+        # Determine the path to the virtual environment
+        venv_path = os.path.join(os.path.dirname(__file__), '.venv')
+        site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
+
+        import django
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
+        from django.conf import settings
+        if hasattr(settings, "configured") and not settings.configured:
+            #alternative to setup, code mainly comes from etk, should be possible to re-use?
+            default_config_home = os.path.expanduser("~/.config")
+            config_home = Path(os.environ.get("XDG_CONFIG_HOME", default_config_home))
+            default_db = os.path.join(default_config_home,'eclair','eclair.sqlite')
+            db_path = os.environ.get("ETK_DATABASE_PATH", default_db)
+            settings.configure(
+                **DEFAULT_SETTINGS,
+                DATABASES={
+                "default": {
+                        "ENGINE": "django.contrib.gis.db.backends.spatialite",
+                        "NAME": db_path,
+                        "TEST": {"TEMPLATE": "eclair.sqlite"},
+                    },
+                }
+            )
+            django.setup()
+        
+        def create_codesets():
+            from etk.edb.models.source_models import CodeSet, Domain
+            try:
+                domain = Domain.objects.get(slug='domain-1')
+            except etk.edb.models.source_models.Domain.DoesNotExist:
+                extent = (
+                    "MULTIPOLYGON ((("
+                    "10.95 50.33, 24.16 50.33, 24.16 69.06, 10.95 69.06, 10.95 50.33"
+                    ")))"
+                )
+                domain = Domain.objects.create(
+                    name="Domain 1",
+                    slug="domain-1",
+                    srid=3006,
+                    extent=extent,
+                    timezone="Europe/Stockholm",
+                )
+            try:
+                vertical_dist = domain.vertical_dists.get(name='vdist1')
+            except etk.edb.models.source_models.VerticalDist.DoesNotExist: 
+                vertical_dist = domain.vertical_dists.create(
+                    name="vdist1", weights="[[5.0, 0.4], [10.0, 0.6]]"
+                )
+
+            try:
+                CodeSet.objects.get(name="code set 1")
+            except etk.edb.models.source_models.CodeSet.DoesNotExist:
+                # similar to base_set in gadget
+                cs1 = CodeSet.objects.create(name="code set 1", slug="code_set1", domain=domain)
+                cs1.codes.create(code="1", label="Energy")
+                cs1.codes.create(
+                    code="1.1", label="Stationary combustion", vertical_dist=vertical_dist
+                )
+                cs1.codes.create(
+                    code="1.2", label="Fugitive emissions", vertical_dist=vertical_dist
+                )
+                cs1.codes.create(code="1.3", label="Road traffic", vertical_dist=vertical_dist)
+                cs1.save()
+                cs2 = CodeSet.objects.create(name="code set 2", slug="code_set2", domain=domain)
+                cs2.codes.create(code="A", label="Bla bla")
+                cs2.save()
+
+        # from django.core.management import execute_from_command_line
+        # execute_from_command_line(sys.argv)
+        from django.core.management import call_command
+        call_command('showmigrations')
+
+
+        from etk.edb.importers import import_pointsourceactivities
+        import etk
+        create_codesets()
+        file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsourceactivities file", "", "Spreadsheet files (*.xlsx);; Comma-separated files (*.csv)")
+        #TODO let user specify unit
+        if file_path:
+            ps = import_pointsourceactivities(file_path, unit="ton/year")
+            display_ps_import_progress(str(ps))
+
 
 
         # from io import StringIO
@@ -221,10 +298,10 @@ class EclairDialog(QDialog):
         # from etk.edb.importers import import_pointsources
         # import_pointsources('/home/a002469/Projects/etk/tests/edb/data/pointsources.csv')
     
-    def show_help(self):
-        """Display application help to the user."""
-        help_url = 'https://git.smhi.se/foclair/minimal-eclair/-/blob/develop/README.md'
-        QDesktopServices.openUrl(QUrl(help_url))
+def show_help(self):
+    """Display application help to the user."""
+    help_url = 'https://git.smhi.se/foclair/minimal-eclair/-/blob/develop/README.md'
+    QDesktopServices.openUrl(QUrl(help_url))
 
 
 def display_ps_import_progress(ps_progress):
