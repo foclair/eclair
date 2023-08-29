@@ -111,24 +111,33 @@ class EclairDialog(QDialog):
         self.init_ui()
 
     def init_ui(self):
+        # Determine the path to the virtual environment
+        venv_path = os.path.join(os.path.dirname(__file__), '.venv')
+        site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
+
+
         layout = QVBoxLayout()
         self.setLayout(layout)
 
-        # Add the QPushButton to the layout
-        btn_action_existing_database = QPushButton("Choose database to edit")
+        label = QLabel("Initialize database:")
+        layout.addWidget(label)
+
+        btn_action_existing_database = QPushButton("Choose existing database to edit")
         layout.addWidget(btn_action_existing_database)
         btn_action_existing_database.clicked.connect(self.load_existing_database_dialog)
 
-        # Add other UI elements here (e.g., QLabel, QLineEdit, etc.)
-        label = QLabel("Start importing files to your database below:")
+        btn_action_new_database = QPushButton("Create and load new database")
+        layout.addWidget(btn_action_new_database)
+        btn_action_new_database.clicked.connect(self.create_new_database_dialog)
+
+        label = QLabel("Import data to your database (*.xlsx and *.csv):")
         layout.addWidget(label)
 
-        # Add the QPushButton to the layout
         btn_action_import_pointsource = QPushButton("Import pointsource")
         layout.addWidget(btn_action_import_pointsource)
         btn_action_import_pointsource.clicked.connect(self.import_pointsource_dialog)
 
-        # Add the QPushButton to the layout
         btn_action_import_pointsourceactivities = QPushButton("Import pointsourceactivities")
         layout.addWidget(btn_action_import_pointsourceactivities)
         btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsourceactivities_dialog)
@@ -138,35 +147,61 @@ class EclairDialog(QDialog):
         # self.dialog.button_box.helpRequested.connect(self.show_help)
 
     def load_existing_database_dialog(self):
-        # This is a start to the actual import pointsource function
-        # currently cannot do initial migrate from QGIS, due to SQLite and SPatiaLite
-        # versions, see https://code.djangoproject.com/ticket/32935
-        
-        # Determine the path to the virtual environment
-        venv_path = os.path.join(os.path.dirname(__file__), '.venv')
-        site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
-
-        import django
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
         from django.conf import settings
+        import django
         if hasattr(settings, "configured") and not settings.configured:
             db_path, _ = QFileDialog.getOpenFileName(None, "Open SQLite database", "", "Database (*.sqlite)")
-            db_name = db_path.split('/')[-1] #does this work for windows and linux?
-            settings.configure(
-                **DEFAULT_SETTINGS,
-                DATABASES={
-                "default": {
-                        "ENGINE": "django.contrib.gis.db.backends.spatialite",
-                        "NAME": db_path,
-                        "TEST": {"TEMPLATE": db_name},
-                    },
-                }
-            )
-            django.setup()
-            display_ps_import_progress('Database succesfully loaded.')
+            if db_path == '':
+                # user cancelled
+                message_box('Warning','No file chosen, database not configured.')
+            else:
+                # TODO catch if empty string, when pushing cancel!! 
+                db_name = db_path.split('/')[-1] #does this work for windows and linux?
+                settings.configure(
+                    **DEFAULT_SETTINGS,
+                    DATABASES={
+                    "default": {
+                            "ENGINE": "django.contrib.gis.db.backends.spatialite",
+                            "NAME": db_path,
+                            "TEST": {"TEMPLATE": db_name},
+                        },
+                    }
+                )
+                django.setup()
+                message_box('Progress database','Database succesfully loaded.')
         else:
             db_path = settings.DATABASES['default']['NAME']
-            display_ps_import_progress('Eclair already configured to use '+str(db_path)+
+            message_box('Warning','Eclair already configured to use '+str(db_path)+
+                ', restart QGIS before choosing another database.'
+            )
+
+    def create_new_database_dialog(self):        
+        # Determine the path to the virtual environment
+        import django
+        from django.conf import settings
+        if hasattr(settings, "configured") and not settings.configured:
+            db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.sqlite)")
+            if (db_path == '') or (db_path.split('.')[-1] !='sqlite'):
+                # user cancelled
+                message_box('Warning','No *.sqlite file chosen, database not created.')
+            else:
+                db_name = db_path.split('/')[-1] #does this work for windows and linux?
+                settings.configure(
+                    **DEFAULT_SETTINGS,
+                    DATABASES={
+                    "default": {
+                            "ENGINE": "django.contrib.gis.db.backends.spatialite",
+                            "NAME": db_path,
+                            "TEST": {"TEMPLATE": db_name},
+                        },
+                    }
+                )
+                django.setup()
+                #TODO add command to copy 'master/template' database, migrate doesnt work
+                message_box('Progress database','Database succesfully created and loaded.')
+        else:
+            db_path = settings.DATABASES['default']['NAME']
+            message_box('Warning','Eclair already configured to use '+str(db_path)+
                 ', restart QGIS before choosing another database.'
             )
     
@@ -177,11 +212,9 @@ class EclairDialog(QDialog):
         # versions, see https://code.djangoproject.com/ticket/32935
         
         # Determine the path to the virtual environment
-        venv_path = os.path.join(os.path.dirname(__file__), '.venv')
-        site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
-
+        # venv_path = os.path.join(os.path.dirname(__file__), '.venv')
+        # site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
         import django
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
         from django.conf import settings
         if hasattr(settings, "configured") and not settings.configured:
             #alternative to setup, code mainly comes from etk, should be possible to re-use?
@@ -200,8 +233,6 @@ class EclairDialog(QDialog):
                 }
             )
             django.setup()
-        else:
-            display_ps_import_progress('database already setup')
         
         def create_codesets():
             from etk.edb.models.source_models import CodeSet, Domain
@@ -247,8 +278,8 @@ class EclairDialog(QDialog):
 
         # from django.core.management import execute_from_command_line
         # execute_from_command_line(sys.argv)
-        from django.core.management import call_command
-        call_command('showmigrations')
+        # from django.core.management import call_command
+        # call_command('showmigrations')
 
 
         from etk.edb.importers import import_pointsources
@@ -258,7 +289,7 @@ class EclairDialog(QDialog):
         #TODO let user specify unit
         if file_path:
             ps = import_pointsources(file_path, unit="ton/year")
-            display_ps_import_progress(str(ps))
+            message_box('Import pointsources progress',str(ps))
 
     def import_pointsourceactivities_dialog(self):
         # This is a start to the actual import pointsource function
@@ -334,8 +365,8 @@ class EclairDialog(QDialog):
 
         # from django.core.management import execute_from_command_line
         # execute_from_command_line(sys.argv)
-        from django.core.management import call_command
-        call_command('showmigrations')
+        # from django.core.management import call_command
+        # call_command('showmigrations')
 
 
         from etk.edb.importers import import_pointsourceactivities
@@ -345,7 +376,7 @@ class EclairDialog(QDialog):
         #TODO let user specify unit
         if file_path:
             ps = import_pointsourceactivities(file_path, unit="ton/year")
-            display_ps_import_progress(str(ps))
+            message_box('Import pointsourceactivities progress',str(ps))
 
 
 
@@ -356,7 +387,7 @@ class EclairDialog(QDialog):
         # django.db.connection.cursor().execute("SELECT InitSpatialMetaData(1)")
         # output_string = output.getvalue()
         # output.close()
-        # display_ps_import_progress(output_string)
+        # message_box(output_string)
 
         # to try from terminal, in python run
         # import django
@@ -374,11 +405,11 @@ def show_help(self):
     QDesktopServices.openUrl(QUrl(help_url))
 
 
-def display_ps_import_progress(ps_progress):
+def message_box(title,text):
     # For this example, let's display the file contents in a message box.
     msg_box = QMessageBox()
-    msg_box.setWindowTitle("Pointsource import progress")
-    msg_box.setText(ps_progress)
+    msg_box.setWindowTitle(title)
+    msg_box.setText(text)
     msg_box.exec_()
 
 
