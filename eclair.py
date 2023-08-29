@@ -68,9 +68,40 @@ class Eclair:
         del self.action
 
     def run(self):
-        QMessageBox.information(None, 'Eclair', 'Click OK to get started')
+        # QMessageBox.information(None, 'Eclair', 'Click OK to get started')
         dialog = EclairDialog()
-        dialog.exec_()
+        dialog.exec_()        
+
+class SetDatabaseDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("ECLAIR")
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # Add other UI elements here (e.g., QLabel, QLineEdit, etc.)
+        label = QLabel("Choose database:")
+        layout.addWidget(label)
+
+        # Add the QPushButton to the layout
+        btn_action_existing_database = QPushButton("Load existing database")
+        layout.addWidget(btn_action_existing_database)
+        btn_action_existing_database.clicked.connect(self.load_existing_database_dialog)
+
+        # Add the QPushButton to the layout
+        # btn_action_import_pointsourceactivities = QPushButton("Create new database")
+        # layout.addWidget(btn_action_import_pointsourceactivities)
+        # btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsourceactivities_dialog)
+
+        # connect the help button to our method
+        # do this with inspiration from plugin builder tool, has .ui file, will we need that?
+        # self.dialog.button_box.helpRequested.connect(self.show_help)
+
+    
+    
 
        
 class EclairDialog(QDialog):
@@ -82,6 +113,11 @@ class EclairDialog(QDialog):
     def init_ui(self):
         layout = QVBoxLayout()
         self.setLayout(layout)
+
+        # Add the QPushButton to the layout
+        btn_action_existing_database = QPushButton("Choose database to edit")
+        layout.addWidget(btn_action_existing_database)
+        btn_action_existing_database.clicked.connect(self.load_existing_database_dialog)
 
         # Add other UI elements here (e.g., QLabel, QLineEdit, etc.)
         label = QLabel("Start importing files to your database below:")
@@ -101,6 +137,38 @@ class EclairDialog(QDialog):
         # do this with inspiration from plugin builder tool, has .ui file, will we need that?
         # self.dialog.button_box.helpRequested.connect(self.show_help)
 
+    def load_existing_database_dialog(self):
+        # This is a start to the actual import pointsource function
+        # currently cannot do initial migrate from QGIS, due to SQLite and SPatiaLite
+        # versions, see https://code.djangoproject.com/ticket/32935
+        
+        # Determine the path to the virtual environment
+        venv_path = os.path.join(os.path.dirname(__file__), '.venv')
+        site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
+
+        import django
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
+        from django.conf import settings
+        if hasattr(settings, "configured") and not settings.configured:
+            db_path, _ = QFileDialog.getOpenFileName(None, "Open SQLite database", "", "Database (*.sqlite)")
+            db_name = db_path.split('/')[-1] #does this work for windows and linux?
+            settings.configure(
+                **DEFAULT_SETTINGS,
+                DATABASES={
+                "default": {
+                        "ENGINE": "django.contrib.gis.db.backends.spatialite",
+                        "NAME": db_path,
+                        "TEST": {"TEMPLATE": db_name},
+                    },
+                }
+            )
+            django.setup()
+            display_ps_import_progress('Database succesfully loaded.')
+        else:
+            db_path = settings.DATABASES['default']['NAME']
+            display_ps_import_progress('Eclair already configured to use '+str(db_path)+
+                ', restart QGIS before choosing another database.'
+            )
     
     
     def import_pointsource_dialog(self):
@@ -132,6 +200,8 @@ class EclairDialog(QDialog):
                 }
             )
             django.setup()
+        else:
+            display_ps_import_progress('database already setup')
         
         def create_codesets():
             from etk.edb.models.source_models import CodeSet, Domain
