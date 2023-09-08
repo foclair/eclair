@@ -36,20 +36,8 @@ import site
 from pathlib import Path
 
 
-# from etk, can re-use from there?
-DEFAULT_SETTINGS = {
-    "DEBUG": False,
-    "INSTALLED_APPS": [
-        "django.contrib.gis",
-        "etk.edb.apps.EdbConfig",
-        "rest_framework",
-    ],
-    "DATABASE_ROUTERS": ["dynamic_db_router.DynamicDbRouter"],
-    "LANGUAGE_CODE": "en-us",
-    "TIME_ZONE": "UTC",
-    "USE_I18N": True,
-    "USE_TZ": True,
-}
+ETK_BINPATH = os.path.expanduser("~/.local/bin")
+os.environ["PATH"] += f":{ETK_BINPATH}"
 
 class Eclair:
     def __init__(self, iface):
@@ -79,9 +67,9 @@ class EclairDialog(QDialog):
 
     def init_ui(self):
         # Determine the path to the virtual environment
+        # necessary to be able to import modules like etk
         venv_path = os.path.join(os.path.dirname(__file__), '.venv')
         site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
         
 
         layout = QVBoxLayout()
@@ -94,7 +82,7 @@ class EclairDialog(QDialog):
         layout.addWidget(btn_action_existing_database)
         btn_action_existing_database.clicked.connect(self.load_existing_database_dialog)
 
-        btn_action_new_database = QPushButton("Create and load new database")
+        btn_action_new_database = QPushButton("Create and connect to new database")
         layout.addWidget(btn_action_new_database)
         btn_action_new_database.clicked.connect(self.create_new_database_dialog)
 
@@ -109,132 +97,33 @@ class EclairDialog(QDialog):
         layout.addWidget(btn_action_import_pointsourceactivities)
         btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsourceactivities_dialog)
 
-        btn_action_import_subprocesses = QPushButton("Import data from spreadsheet - using subprocesses")
-        layout.addWidget(btn_action_import_subprocesses)
-        btn_action_import_subprocesses.clicked.connect(self.import_subprocesses_dialog)
-
 
     def load_existing_database_dialog(self):
-        from django.conf import settings
-        import django
-        if hasattr(settings, "configured") and not settings.configured:
             db_path, _ = QFileDialog.getOpenFileName(None, "Open SQLite database", "", "Database (*.sqlite)")
             if db_path == '':
                 # user cancelled
                 message_box('Warning','No file chosen, database not configured.')
             else:
-                # TODO catch if empty string, when pushing cancel!! 
-                db_name = db_path.split('/')[-1] #does this work for windows and linux?
-                settings.configure(
-                    **DEFAULT_SETTINGS,
-                    DATABASES={
-                    "default": {
-                            "ENGINE": "django.contrib.gis.db.backends.spatialite",
-                            "NAME": db_path,
-                            "TEST": {"TEMPLATE": db_name},
-                        },
-                    }
-                )
-                django.setup()
-                message_box('Progress database','Database succesfully loaded.')
+                message_box('Progress database','Database succesfully chosen TODO add code here.')
+
+    def create_new_database_dialog(self):
+        db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.sqlite)")
+        if (db_path == '') or (db_path.split('.')[-1] !='sqlite'):
+            # user cancelled
+            message_box('Warning','No *.sqlite file chosen, database not created.')
         else:
-            db_path = settings.DATABASES['default']['NAME']
-            message_box('Warning','Eclair already configured to use '+str(db_path)+
-                ', restart QGIS before choosing another database.'
-            )
-
-    def create_new_database_dialog(self):        
-        # Determine the path to the virtual environment
-        import django
-        from django.conf import settings
-        if hasattr(settings, "configured") and not settings.configured:
-            db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.sqlite)")
-            if (db_path == '') or (db_path.split('.')[-1] !='sqlite'):
-                # user cancelled
-                message_box('Warning','No *.sqlite file chosen, database not created.')
-            else:
-                db_name = db_path.split('/')[-1] #does this work for windows and linux?
-                settings.configure(
-                    **DEFAULT_SETTINGS,
-                    DATABASES={
-                    "default": {
-                            "ENGINE": "django.contrib.gis.db.backends.spatialite",
-                            "NAME": db_path,
-                            "TEST": {"TEMPLATE": db_name},
-                        },
-                    }
-                )
-                django.setup()
-                #TODO add command to copy 'master/template' database, migrate doesnt work
-                message_box('Progress database','Database succesfully created and loaded.')
-        else:
-            db_path = settings.DATABASES['default']['NAME']
-            message_box('Warning','Eclair already configured to use '+str(db_path)+
-                ', restart QGIS before choosing another database.'
-            )
-    
-    
-    def import_pointsource_dialog(self):
-        import django
-        from django.conf import settings
-        if hasattr(settings, "configured") and not settings.configured:
-            #alternative to setup, code mainly comes from etk, should be possible to re-use?
-            default_config_home = os.path.expanduser("~/.config")
-            config_home = Path(os.environ.get("XDG_CONFIG_HOME", default_config_home))
-            default_db = os.path.join(default_config_home,'eclair','eclair.sqlite')
-            db_path = os.environ.get("ETK_DATABASE_PATH", default_db)
-            settings.configure(
-                **DEFAULT_SETTINGS,
-                DATABASES={
-                "default": {
-                        "ENGINE": "django.contrib.gis.db.backends.spatialite",
-                        "NAME": db_path,
-                        "TEST": {"TEMPLATE": "eclair.sqlite"},
-                    },
-                }
-            )
-            django.setup()
-
-
-        from etk.edb.importers import import_pointsources
-        import etk
-        file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsource file", "", "Spreadsheet files (*.xlsx);; Comma-separated files (*.csv)")
-        #TODO let user specify unit
-        if file_path: #if file_path not empty string (user did not click cancel)
-            from openpyxl import load_workbook
-            workbook = load_workbook(filename=file_path, data_only=True)
-            from etk.edb.importers import SHEET_NAMES
-            # workbook.worksheets  compare to SHEET_NAMES
-            valid_sheets = [sheet.title for sheet in workbook.worksheets if sheet.title in SHEET_NAMES]
-            checkboxDialog = CheckboxDialog(self,valid_sheets)
-            checkboxDialog.exec_()  # Show the dialog as a modal dialog
-            ps = import_pointsources(file_path, unit="ton/year")
-            message_box('Import pointsources progress',str(ps))
+            from etk.tools.utils import CalledProcessError, create_from_template
+            try:
+                # TODO should make sure that template database is migrated before
+                # creating new from template!
+                proc = create_from_template(db_path)
+                os.environ["ETK_DATABASE_PATH"] = db_path
+                message_box('Created database',f"Successfully created database {db_path}")
+            except CalledProcessError as e:
+                error = e.stderr.decode("utf-8")    
+                message_box('Import error',f"Error: {error}")
 
     def import_pointsourceactivities_dialog(self):
-        import django
-        from django.conf import settings
-        if hasattr(settings, "configured") and not settings.configured:
-            #alternative to setup, code mainly comes from etk, should be possible to re-use?
-            default_config_home = os.path.expanduser("~/.config")
-            config_home = Path(os.environ.get("XDG_CONFIG_HOME", default_config_home))
-            default_db = os.path.join(default_config_home,'eclair','eclair.sqlite')
-            db_path = os.environ.get("ETK_DATABASE_PATH", default_db)
-            settings.configure(
-                **DEFAULT_SETTINGS,
-                DATABASES={
-                "default": {
-                        "ENGINE": "django.contrib.gis.db.backends.spatialite",
-                        "NAME": db_path,
-                        "TEST": {"TEMPLATE": "eclair.sqlite"},
-                    },
-                }
-            )
-            django.setup()
-        
-
-        from etk.edb.importers import import_pointsourceactivities
-        import etk
         file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsourceactivities file", "", "Spreadsheet files (*.xlsx);; Comma-separated files (*.csv)")
         #TODO let user specify unit
         if file_path: #if file_path not empty string (user did not click cancel)
@@ -250,15 +139,27 @@ class EclairDialog(QDialog):
                 sheets = checkboxDialog.sheet_names
             else:
                 message_box('Importing progress','importing all valid sheets '+str(valid_sheets))
-                sheets = valid_sheets
-            ps = import_pointsourceactivities(file_path,import_sheets=sheets)
-            message_box('Import pointsourceactivities progress',str(ps))
+                sheets = SHEET_NAMES
+            from etk.tools.utils import CalledProcessError, run_import
+            try:
+                # specify db_path here?
+                (stdout, stderr) = run_import(file_path, str(sheets), unit="ton/year")
+                message_box('Import status','Imported pointsourceactivities successfully '+stdout.decode("utf-8"))
+            except CalledProcessError as e:
+                error = e.stderr.decode("utf-8")
+                if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
+                    message_box('Error',f"Error: a target database is not specified yet,"
+                    +" choose an existing or create a new database first.")
+                else:
+                    #  (Exit Code {e.returncode})
+                    message_box('Import error',f"Error: {error}")
+        
+        #----- old function below here 
 
-    def import_subprocesses_dialog(self):
-        from etk.tools.utils import CalledProcessError, run_import
-        pointsource_xlsx = '/home/a002469/Projects/etk/tests/edb/data/pointsources.xlsx'
-        run_import(pointsource_xlsx, "pointsources", unit="ton/year")
-        message_box('Test','test')
+
+
+
+
 
     def showCheckboxDialog(self):
         checkboxDialog = CheckboxDialog(self,valid_sheets)
