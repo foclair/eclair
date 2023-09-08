@@ -109,6 +109,10 @@ class EclairDialog(QDialog):
         layout.addWidget(btn_action_import_pointsourceactivities)
         btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsourceactivities_dialog)
 
+        btn_action_import_subprocesses = QPushButton("Import data from spreadsheet - using subprocesses")
+        layout.addWidget(btn_action_import_subprocesses)
+        btn_action_import_subprocesses.clicked.connect(self.import_subprocesses_dialog)
+
 
     def load_existing_database_dialog(self):
         from django.conf import settings
@@ -190,53 +194,10 @@ class EclairDialog(QDialog):
                 }
             )
             django.setup()
-        
-        def create_codesets():
-            from etk.edb.models.source_models import CodeSet, Domain
-            try:
-                domain = Domain.objects.get(slug='domain-1')
-            except etk.edb.models.source_models.Domain.DoesNotExist:
-                extent = (
-                    "MULTIPOLYGON ((("
-                    "10.95 50.33, 24.16 50.33, 24.16 69.06, 10.95 69.06, 10.95 50.33"
-                    ")))"
-                )
-                domain = Domain.objects.create(
-                    name="Domain 1",
-                    slug="domain-1",
-                    srid=3006,
-                    extent=extent,
-                    timezone="Europe/Stockholm",
-                )
-            try:
-                vertical_dist = domain.vertical_dists.get(name='vdist1')
-            except etk.edb.models.source_models.VerticalDist.DoesNotExist: 
-                vertical_dist = domain.vertical_dists.create(
-                    name="vdist1", weights="[[5.0, 0.4], [10.0, 0.6]]"
-                )
-
-            try:
-                CodeSet.objects.get(name="code set 1")
-            except etk.edb.models.source_models.CodeSet.DoesNotExist:
-                # similar to base_set in gadget
-                cs1 = CodeSet.objects.create(name="code set 1", slug="code_set1", domain=domain)
-                cs1.codes.create(code="1", label="Energy")
-                cs1.codes.create(
-                    code="1.1", label="Stationary combustion", vertical_dist=vertical_dist
-                )
-                cs1.codes.create(
-                    code="1.2", label="Fugitive emissions", vertical_dist=vertical_dist
-                )
-                cs1.codes.create(code="1.3", label="Road traffic", vertical_dist=vertical_dist)
-                cs1.save()
-                cs2 = CodeSet.objects.create(name="code set 2", slug="code_set2", domain=domain)
-                cs2.codes.create(code="A", label="Bla bla")
-                cs2.save()
 
 
         from etk.edb.importers import import_pointsources
         import etk
-        create_codesets()
         file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsource file", "", "Spreadsheet files (*.xlsx);; Comma-separated files (*.csv)")
         #TODO let user specify unit
         if file_path: #if file_path not empty string (user did not click cancel)
@@ -271,54 +232,9 @@ class EclairDialog(QDialog):
             )
             django.setup()
         
-        def create_codesets():
-            from etk.edb.models.source_models import CodeSet, Domain
-            try:
-                domain = Domain.objects.get(slug='domain-1')
-            except etk.edb.models.source_models.Domain.DoesNotExist:
-                extent = (
-                    "MULTIPOLYGON ((("
-                    "10.95 50.33, 24.16 50.33, 24.16 69.06, 10.95 69.06, 10.95 50.33"
-                    ")))"
-                )
-                domain = Domain.objects.create(
-                    name="Domain 1",
-                    slug="domain-1",
-                    srid=3006,
-                    extent=extent,
-                    timezone="Europe/Stockholm",
-                )
-            try:
-                vertical_dist = domain.vertical_dists.get(name='vdist1')
-            except etk.edb.models.source_models.VerticalDist.DoesNotExist: 
-                vertical_dist = domain.vertical_dists.create(
-                    name="vdist1", weights="[[5.0, 0.4], [10.0, 0.6]]"
-                )
-
-            try:
-                CodeSet.objects.get(name="code set 1")
-            except etk.edb.models.source_models.CodeSet.DoesNotExist:
-                # similar to base_set in gadget
-                cs1 = CodeSet.objects.create(name="code set 1", slug="code_set1", domain=domain)
-                cs1.codes.create(code="1", label="Energy")
-                cs1.codes.create(
-                    code="1.1", label="Stationary combustion", vertical_dist=vertical_dist
-                )
-                cs1.codes.create(
-                    code="1.2", label="Fugitive emissions", vertical_dist=vertical_dist
-                )
-                cs1.codes.create(code="1.3", label="Road traffic", vertical_dist=vertical_dist)
-                cs1.save()
-                cs2 = CodeSet.objects.create(name="code set 2", slug="code_set2", domain=domain)
-                cs2.codes.create(code="A", label="Bla bla")
-                cs2.save()
-
-
-
 
         from etk.edb.importers import import_pointsourceactivities
         import etk
-        create_codesets()
         file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsourceactivities file", "", "Spreadsheet files (*.xlsx);; Comma-separated files (*.csv)")
         #TODO let user specify unit
         if file_path: #if file_path not empty string (user did not click cancel)
@@ -337,6 +253,12 @@ class EclairDialog(QDialog):
                 sheets = valid_sheets
             ps = import_pointsourceactivities(file_path,import_sheets=sheets)
             message_box('Import pointsourceactivities progress',str(ps))
+
+    def import_subprocesses_dialog(self):
+        from etk.tools.utils import CalledProcessError, run_import
+        pointsource_xlsx = '/home/a002469/Projects/etk/tests/edb/data/pointsources.xlsx'
+        run_import(pointsource_xlsx, "pointsources", unit="ton/year")
+        message_box('Test','test')
 
     def showCheckboxDialog(self):
         checkboxDialog = CheckboxDialog(self,valid_sheets)
@@ -390,8 +312,6 @@ class CheckboxDialog(QDialog):
     def import_sheets_dialog(self):
         # Store the state of the checkboxes
         self.sheet_names = [label for label in self.box_labels if self.checkboxes[label].isChecked()]
-        message_box('Import sheets progress','Under construction, checkbox states'+str(self.sheet_names))
-
         # close the checkbox dialog
         self.accept()
 
