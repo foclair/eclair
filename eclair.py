@@ -38,6 +38,7 @@ from pathlib import Path
 
 ETK_BINPATH = os.path.expanduser("~/.local/bin")
 os.environ["PATH"] += f":{ETK_BINPATH}"
+sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 
 class Eclair:
     def __init__(self, iface):
@@ -68,9 +69,8 @@ class EclairDialog(QDialog):
     def init_ui(self):
         # Determine the path to the virtual environment
         # necessary to be able to import modules like etk
-        venv_path = os.path.join(os.path.dirname(__file__), '.venv')
-        site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
+        # venv_path = os.path.join(os.path.dirname(__file__), '.venv')
+        # site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
         
 
         layout = QVBoxLayout()
@@ -130,8 +130,8 @@ class EclairDialog(QDialog):
         if file_path: #if file_path not empty string (user did not click cancel)
             from openpyxl import load_workbook
             workbook = load_workbook(filename=file_path, data_only=True)
-            from etk.edb.importers import SHEET_NAMES
             # workbook.worksheets  compare to SHEET_NAMES
+            from etk.edb.const import SHEET_NAMES
             valid_sheets = [sheet.title for sheet in workbook.worksheets if sheet.title in SHEET_NAMES]
             
             checkboxDialog = CheckboxDialog(self,valid_sheets)
