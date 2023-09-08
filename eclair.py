@@ -70,6 +70,7 @@ class EclairDialog(QDialog):
         # necessary to be able to import modules like etk
         venv_path = os.path.join(os.path.dirname(__file__), '.venv')
         site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
         
 
         layout = QVBoxLayout()
