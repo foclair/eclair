@@ -24,7 +24,7 @@
 
 from PyQt5.QtWidgets import QAction, QWidget
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QPushButton, QLabel, QMessageBox
-from PyQt5.QtWidgets import QFileDialog, QCheckBox
+from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices
 from PyQt5.QtCore import Qt
@@ -132,10 +132,23 @@ class EclairDialog(QDialog):
             else:
                 message_box('Importing progress','importing all valid sheets '+str(valid_sheets))
                 sheets = SHEET_NAMES
+
+            if "PointSource" in sheets:
+                # need to specify unit for PointSourceSubstance
+                unitDialog = UnitDialog(self,options=["ton/year","g/s"])
+                result = unitDialog.exec_()  # Show the dialog as a modal dialog
+                if result == QDialog.Accepted:
+                    unit = unitDialog.unit
+                else:
+                    message_box('Importing progress','Importing pointsources with default unit ton/year.')
+                    unit = "ton/year"
+            else:
+                unit=None
+            
             from etk.tools.utils import CalledProcessError, run_import
             try:
                 # specify db_path here?
-                (stdout, stderr) = run_import(file_path, str(sheets), unit="ton/year")
+                (stdout, stderr) = run_import(file_path, str(sheets), unit=unit)
                 message_box('Import status','Imported pointsourceactivities successfully '+stdout.decode("utf-8"))
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
@@ -146,16 +159,11 @@ class EclairDialog(QDialog):
                     #  (Exit Code {e.returncode})
                     import_error = error.split('ImportError:')[-1]
                     message_box('Import error',f"Error: {import_error}")
-
-
-    def showCheckboxDialog(self):
-        checkboxDialog = CheckboxDialog(self,valid_sheets)
-        checkboxDialog.connect(self.handleSheetNames)
-        checkboxDialog.exec_()  # Show the dialog as a modal dialog
+        else:
+            # user cancelled
+            message_box('Import error','No file chosen, no data imported.')
     
-    def handleSheetNames(self, sheet_names):
-        return sheet_names
-    
+
 def show_help(self):
     """Display application help to the user."""
     help_url = 'https://git.smhi.se/foclair/minimal-eclair/-/blob/develop/README.md'
@@ -201,4 +209,48 @@ class CheckboxDialog(QDialog):
         # Store the state of the checkboxes
         self.sheet_names = [label for label in self.box_labels if self.checkboxes[label].isChecked()]
         # close the checkbox dialog
+        self.accept()
+
+class UnitDialog(QDialog):
+    # commonly called RadioButtonDialog, change if used for more cases
+    def __init__(self, parent=None, options=None):
+        super().__init__(parent)
+        self.options = options
+        self.selected_option = None
+
+        self.initUI()
+
+    def initUI(self):
+        # Create radio buttons for each option in the list
+        self.radio_buttons = []
+        self.button_group = QButtonGroup()
+
+        for option in self.options:
+            radio_button = QRadioButton(option)
+            self.radio_buttons.append(radio_button)
+            self.button_group.addButton(radio_button)
+
+        # Create a button to save and close the dialog
+        saveButton = QPushButton('Save and Close')
+        saveButton.clicked.connect(self.saveAndClose)
+
+        # Create a layout for the dialog
+        layout = QVBoxLayout()
+        
+        # Add radio buttons and the save button to the layout
+        for radio_button in self.radio_buttons:
+            layout.addWidget(radio_button)
+        layout.addWidget(saveButton)
+
+        # Set the layout for the dialog
+        self.setLayout(layout)
+
+    def saveAndClose(self):
+        # Determine the selected option
+        for radio_button in self.radio_buttons:
+            if radio_button.isChecked():
+                self.unit = radio_button.text()
+                break
+
+        # Close the dialog
         self.accept()
