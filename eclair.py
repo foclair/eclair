@@ -22,7 +22,7 @@
 
 
 
-from PyQt5.QtWidgets import QAction, QWidget
+from PyQt5.QtWidgets import QAction, QWidget, QTableWidget, QTableWidgetItem
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox
 from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup #, QLineEdit
 from PyQt5.QtCore import QUrl
@@ -33,6 +33,7 @@ import os
 import sys
 import subprocess
 import site
+import ast
 from pathlib import Path
 
 
@@ -136,7 +137,8 @@ class EclairDialog(QDialog):
             try:
                 # specify db_path here?
                 (stdout, stderr) = run_import(file_path, str(sheets))
-                message_box('Import status','Imported pointsourceactivities successfully '+stdout.decode("utf-8"))
+                tableDialog = TableDialog(self,'Import status','Imported pointsourceactivities successfully ',stdout.decode("utf-8"))
+                tableDialog.exec_()  # Show the dialog as a modal dialog
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
@@ -198,3 +200,50 @@ class CheckboxDialog(QDialog):
         # close the checkbox dialog
         self.accept()
 
+
+
+class TableDialog(QDialog):
+    def __init__(self,parent=None, title=None, text=None, table_dict=None):
+        super().__init__()
+        self.title = title
+        self.text = text
+        self.table_dict = table_dict
+        self.initUI()
+
+    def initUI(self):
+        # convert string to dict
+        table_dict = ast.literal_eval(self.table_dict)
+
+        # TODO: do not know whether timevar is updated or created, skipping for now
+        if 'timevar' in table_dict:
+            table_dict.pop('timevar')
+
+        nr_rows = len(table_dict.keys())
+
+        # self.setGeometry(100, 100, 400, 300)
+        self.setWindowTitle(self.title)
+
+        layout = QVBoxLayout()
+        label = QLabel(self.text)
+        layout.addWidget(label)
+
+
+        tableWidget = QTableWidget(self)
+        tableWidget.setRowCount(nr_rows)
+        tableWidget.setColumnCount(2)
+
+        for row, key in enumerate(sorted(table_dict.keys())):
+            item = QTableWidgetItem(str(table_dict[key]['created']))
+            tableWidget.setItem(row, 0, item)
+            item = QTableWidgetItem(str(table_dict[key]['updated']))
+            tableWidget.setItem(row, 1, item)
+
+        # Set headers for the table
+        tableWidget.setHorizontalHeaderLabels(['created', 'updated'])
+        tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
+
+        # Resize the columns to fit the content
+        tableWidget.resizeColumnsToContents()
+        layout.addWidget(tableWidget)
+        # Set the layout for the dialog
+        self.setLayout(layout)
