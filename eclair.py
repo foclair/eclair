@@ -84,10 +84,6 @@ class EclairDialog(QDialog):
         label = QLabel("Import data to your database (*.xlsx and *.csv):")
         layout.addWidget(label)
 
-        # btn_action_import_pointsource = QPushButton("Import pointsource")
-        # layout.addWidget(btn_action_import_pointsource)
-        # btn_action_import_pointsource.clicked.connect(self.import_pointsource_dialog)
-
         btn_action_import_pointsourceactivities = QPushButton("Import data from spreadsheet")
         layout.addWidget(btn_action_import_pointsourceactivities)
         btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsourceactivities_dialog)
@@ -148,11 +144,8 @@ class EclairDialog(QDialog):
                     +" choose an existing or create a new database first.")
                 else:
                     #  (Exit Code {e.returncode})
-                    message_box('Import error',f"Error: {error}")
-
-
-
-
+                    import_error = error.split('ImportError:')[-1]
+                    message_box('Import error',f"Error: {import_error}")
 
 
     def showCheckboxDialog(self):
