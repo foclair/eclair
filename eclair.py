@@ -67,12 +67,6 @@ class EclairDialog(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        # Determine the path to the virtual environment
-        # necessary to be able to import modules like etk
-        # venv_path = os.path.join(os.path.dirname(__file__), '.venv')
-        # site.addsitedir(os.path.join(venv_path, "lib", "python3.9", "site-packages"))
-        
-
         layout = QVBoxLayout()
         self.setLayout(layout)
 
@@ -105,7 +99,8 @@ class EclairDialog(QDialog):
                 # user cancelled
                 message_box('Warning','No file chosen, database not configured.')
             else:
-                message_box('Progress database','Database succesfully chosen TODO add code here.')
+                os.environ["ETK_DATABASE_PATH"] = db_path
+                message_box('Load database',f"Database succesfully chosen database {db_path}.")
 
     def create_new_database_dialog(self):
         db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.sqlite)")
@@ -154,8 +149,6 @@ class EclairDialog(QDialog):
                 else:
                     #  (Exit Code {e.returncode})
                     message_box('Import error',f"Error: {error}")
-        
-        #----- old function below here 
 
 
 
@@ -216,34 +209,3 @@ class CheckboxDialog(QDialog):
         self.sheet_names = [label for label in self.box_labels if self.checkboxes[label].isChecked()]
         # close the checkbox dialog
         self.accept()
-
-
-
-
-
-
-
-# leftover code from testing
-# from io import StringIO
-# output = StringIO()
-# # Redirect sys.stdout to the captured_output
-# sys.stdout = output
-# django.db.connection.cursor().execute("SELECT InitSpatialMetaData(1)")
-# output_string = output.getvalue()
-# output.close()
-# message_box(output_string)
-
-# to try from terminal, in python run
-# import django
-# import os
-# import sys
-# os.environ.setdefault("DJANGO_SETTINGS_MODULE", "etk.settings")
-# from django.core.management import execute_from_command_line
-# execute_from_command_line(sys.argv)
-# from etk.edb.importers import import_pointsources
-# import_pointsources('/home/a002469/Projects/etk/tests/edb/data/pointsources.csv')
-
-# from django.core.management import execute_from_command_line
-# execute_from_command_line(sys.argv)
-# from django.core.management import call_command
-# call_command('showmigrations')
