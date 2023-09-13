@@ -58,7 +58,8 @@ class Eclair:
 
     def run(self):
         dialog = EclairDialog(self)
-        dialog.show()        
+        # dialog.show() modeles with show, but then no other dialogs appear??
+        dialog.exec_()        
 
         #dlg = QDialog(iface.mainWindow())
         # app = QApplication(sys.argv)
@@ -151,9 +152,16 @@ class EclairDialog(QDialog):
         self.tab_calculate.setLayout(layout_calculate)
         label = QLabel("Functions for calculating previously imported data.", self.tab_calculate)
         layout_calculate.addWidget(label)
-        btn_action_sector = QPushButton(" Aggregate emissions per sector ", self.tab_calculate)
-        btn_action_sector.setFont(italic_font)
-        layout_calculate.addWidget(btn_action_sector)
+
+        btn_action_create_table = QPushButton(" Create table all pointsources ", self.tab_calculate)
+        layout_calculate.addWidget(btn_action_create_table)
+        btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
+
+        btn_action_aggregate = QPushButton(" Aggregate emissions per sector ", self.tab_calculate)
+        #btn_action_aggregate.setFont(italic_font)
+        layout_calculate.addWidget(btn_action_aggregate)
+        btn_action_aggregate.clicked.connect(self.aggregate_emissions_dialog)
+
         btn_action_raster = QPushButton(" Calculate raster of emissions ", self.tab_calculate)
         btn_action_raster.setFont(italic_font)
         layout_calculate.addWidget(btn_action_raster)
@@ -250,7 +258,27 @@ class EclairDialog(QDialog):
         else:
             # user cancelled
             message_box('Import error','No file chosen, no data imported.')
-    
+
+    def create_emission_table_dialog(self):
+        from etk.tools.utils import CalledProcessError, run_update_emission_tables
+        try:
+            (stdout, stderr) = run_update_emission_tables()
+            message_box('Created emission table',"Successfully created emission table")
+        except CalledProcessError as e:
+            error = e.stderr.decode("utf-8")
+            message_box('Import error',f"Error: {error}")
+
+    def aggregate_emissions_dialog(self):
+        from etk.tools.utils import CalledProcessError, run_aggregate_emissions
+        try:
+            #TODO give user choice which codeset to aggregate from;
+            #  how to know which exist?
+            filename='/home/a002469/Documents/InventoryToolkit/'
+            (stdout, stderr) = run_aggregate_emissions(filename,codeset='code_set1')
+            message_box('Aggregate emissions',"Successfully aggregated emissions.")
+        except CalledProcessError as e:
+            error = e.stderr.decode("utf-8")
+            message_box('Import error',f"Error: {error}")
 
 def show_help(self):
     """Display application help to the user."""
