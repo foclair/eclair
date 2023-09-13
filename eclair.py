@@ -22,11 +22,11 @@
 
 
 
-from PyQt5.QtWidgets import QAction, QWidget, QTableWidget, QTableWidgetItem
+from PyQt5.QtWidgets import QApplication, QAction, QWidget, QTableWidget, QTableWidgetItem
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox
-from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup #, QLineEdit
+from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup, QTabWidget, QMainWindow #, QLineEdit
 from PyQt5.QtCore import QUrl
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase
 from PyQt5.QtCore import Qt
 
 import os
@@ -56,9 +56,12 @@ class Eclair:
         del self.action
 
     def run(self):
-        # QMessageBox.information(None, 'Eclair', 'Click OK to get started')
         dialog = EclairDialog()
         dialog.exec_()        
+        # app = QApplication(sys.argv)
+        # window = EclairDialog()
+        # window.show()
+        # sys.exit(app.exec_())
 
        
 class EclairDialog(QDialog):
@@ -68,27 +71,105 @@ class EclairDialog(QDialog):
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout()
-        self.setLayout(layout)
+        default_font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
+        italic_font = default_font
+        italic_font.setItalic(True)
 
-        label = QLabel("Initialize database:")
-        layout.addWidget(label)
+        self.setGeometry(100, 100, 800, 300)
+        self.tab_widget = QTabWidget(self)
+        self.tab_widget.setGeometry(0,0, 795, 295)
+        # Create tabs
+        self.tab_db = QWidget()
+        self.tab_import = QWidget()
+        self.tab_edit = QWidget()
+        self.tab_export = QWidget()
+        self.tab_calculate = QWidget()
+        self.tab_visualize = QWidget()
+        # Add tabs to the tab widget
+        self.tab_widget.addTab(self.tab_db, "Database Settings")
+        self.tab_widget.addTab(self.tab_import, "Import Data")
+        self.tab_widget.addTab(self.tab_edit, "Edit Data")
+        self.tab_widget.addTab(self.tab_export, "Export Data")
+        self.tab_widget.addTab(self.tab_calculate, "Analyse Emissions")
+        self.tab_widget.addTab(self.tab_visualize, "Visualize Emissions")
 
-        btn_action_existing_database = QPushButton("Choose existing database to edit")
-        layout.addWidget(btn_action_existing_database)
+        # Database
+        layout_db = QVBoxLayout()
+        self.tab_db.setLayout(layout_db)
+        self.db_label = QLabel(self)
+        self.update_db_label()
+        layout_db.addWidget(self.db_label)
+
+        btn_action_existing_database = QPushButton("Choose existing database to edit", self.tab_db)
+        layout_db.addWidget(btn_action_existing_database)
         btn_action_existing_database.clicked.connect(self.load_existing_database_dialog)
 
-        btn_action_new_database = QPushButton("Create and connect to new database")
-        layout.addWidget(btn_action_new_database)
+        btn_action_new_database = QPushButton("Create and connect to new database", self.tab_db)
+        layout_db.addWidget(btn_action_new_database)
         btn_action_new_database.clicked.connect(self.create_new_database_dialog)
 
-        label = QLabel("Import data to your database (*.xlsx and *.csv):")
-        layout.addWidget(label)
+        # Import
+        layout_import = QVBoxLayout()
+        self.tab_import.setLayout(layout_import)
+        label = QLabel("Import data to your database (*.xlsx):", self.tab_import)
+        layout_import.addWidget(label)
 
-        btn_action_import_pointsourceactivities = QPushButton("Import data from spreadsheet")
-        layout.addWidget(btn_action_import_pointsourceactivities)
-        btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsourceactivities_dialog)
+        btn_action_import_pointsourceactivities = QPushButton("Import data from spreadsheet", self.tab_import)
+        layout_import.addWidget(btn_action_import_pointsourceactivities)
+        btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsources)
 
+        btn_action_validate_pointsourceactivities = QPushButton("Validate spreadsheet without importing", self.tab_import)
+        layout_import.addWidget(btn_action_validate_pointsourceactivities)
+        btn_action_validate_pointsourceactivities.clicked.connect(self.validate_pointsources)
+
+        # Edit
+        layout_edit = QVBoxLayout()
+        self.tab_edit.setLayout(layout_edit)
+        label = QLabel("Functions for editing previously imported data.", self.tab_edit)
+        layout_edit.addWidget(label)
+        btn_action_edit = QPushButton(" Edit imported data ", self.tab_edit)
+        btn_action_edit.setFont(italic_font)
+        layout_edit.addWidget(btn_action_edit)
+
+        # Export
+        layout_export = QVBoxLayout()
+        self.tab_export.setLayout(layout_export)
+        label = QLabel("Functions for exporting previously imported data.", self.tab_export)
+        layout_export.addWidget(label)
+        btn_action_export_all = QPushButton(" Export all imported data ", self.tab_export)
+        btn_action_export_all.setFont(italic_font)
+        layout_export.addWidget(btn_action_export_all)
+        btn_action_export = QPushButton(" Export only pointsources, areasources or road sources ", self.tab_export)
+        btn_action_export.setFont(italic_font)
+        layout_export.addWidget(btn_action_export)
+
+        # Calculate emissions
+        layout_calculate = QVBoxLayout()
+        self.tab_calculate.setLayout(layout_calculate)
+        label = QLabel("Functions for calculating previously imported data.", self.tab_calculate)
+        layout_calculate.addWidget(label)
+        btn_action_sector = QPushButton(" Aggregate emissions per sector ", self.tab_calculate)
+        btn_action_sector.setFont(italic_font)
+        layout_calculate.addWidget(btn_action_sector)
+        btn_action_raster = QPushButton(" Calculate raster of emissions ", self.tab_calculate)
+        btn_action_raster.setFont(italic_font)
+        layout_calculate.addWidget(btn_action_raster)
+
+
+        # Visualize emissions
+        layout_visualize = QVBoxLayout()
+        self.tab_visualize.setLayout(layout_visualize)
+        label = QLabel("Functions for visualizing previously imported data.", self.tab_visualize)
+        layout_visualize.addWidget(label)
+        btn_action_visualize = QPushButton(" visualize all geographic data ", self.tab_visualize)
+        btn_action_visualize.setFont(italic_font)
+        layout_visualize.addWidget(btn_action_visualize)
+        # Set the tab widget as the central widget
+        # self.setCentralWidget(self.tab_widget)
+
+    def update_db_label(self):
+        db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+        self.db_label.setText(f"Eclair is currently connected to database:\n {db_path}")
 
     def load_existing_database_dialog(self):
             db_path, _ = QFileDialog.getOpenFileName(None, "Open SQLite database", "", "Database (*.sqlite)")
@@ -97,6 +178,7 @@ class EclairDialog(QDialog):
                 message_box('Warning','No file chosen, database not configured.')
             else:
                 os.environ["ETK_DATABASE_PATH"] = db_path
+                self.update_db_label()
                 message_box('Load database',f"Database succesfully chosen database {db_path}.")
 
     def create_new_database_dialog(self):
@@ -111,10 +193,19 @@ class EclairDialog(QDialog):
                 # creating new from template!
                 proc = create_from_template(db_path)
                 os.environ["ETK_DATABASE_PATH"] = db_path
+                self.update_db_label()
                 message_box('Created database',f"Successfully created database {db_path}")
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")    
                 message_box('Import error',f"Error: {error}")
+    
+    def import_pointsources(self):
+        self.dry_run = False
+        self.import_pointsourceactivities_dialog
+
+    def validate_pointsources(self):
+        self.dry_run = True
+        self.import_pointsourceactivities_dialog
 
     def import_pointsourceactivities_dialog(self):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsourceactivities file", "", "Spreadsheet files (*.xlsx);; Comma-separated files (*.csv)")
@@ -136,7 +227,7 @@ class EclairDialog(QDialog):
             from etk.tools.utils import CalledProcessError, run_import
             try:
                 # specify db_path here?
-                (stdout, stderr) = run_import(file_path, str(sheets))
+                (stdout, stderr) = run_import(file_path, str(sheets), dry_run=self.dry_run)
                 tableDialog = TableDialog(self,'Import status','Imported pointsourceactivities successfully ',stdout.decode("utf-8"))
                 tableDialog.exec_()  # Show the dialog as a modal dialog
             except CalledProcessError as e:
