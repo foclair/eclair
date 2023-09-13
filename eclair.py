@@ -28,6 +28,7 @@ from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup, 
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase
 from PyQt5.QtCore import Qt
+from qgis.utils import iface
 
 import os
 import sys
@@ -56,17 +57,19 @@ class Eclair:
         del self.action
 
     def run(self):
-        dialog = EclairDialog()
-        dialog.exec_()        
+        dialog = EclairDialog(self)
+        dialog.show()        
+
+        #dlg = QDialog(iface.mainWindow())
         # app = QApplication(sys.argv)
-        # window = EclairDialog()
-        # window.show()
+        #window = EclairDialog()
+        #window.show()
         # sys.exit(app.exec_())
 
        
 class EclairDialog(QDialog):
-    def __init__(self):
-        super().__init__()
+    def __init__(self,parent=None):
+        super(EclairDialog, self).__init__(iface.mainWindow())
         self.setWindowTitle("ECLAIR")
         self.init_ui()
 
