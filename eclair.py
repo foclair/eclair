@@ -201,11 +201,11 @@ class EclairDialog(QDialog):
     
     def import_pointsources(self):
         self.dry_run = False
-        self.import_pointsourceactivities_dialog
+        self.import_pointsourceactivities_dialog()
 
     def validate_pointsources(self):
         self.dry_run = True
-        self.import_pointsourceactivities_dialog
+        self.import_pointsourceactivities_dialog()
 
     def import_pointsourceactivities_dialog(self):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsourceactivities file", "", "Spreadsheet files (*.xlsx);; Comma-separated files (*.csv)")
@@ -216,27 +216,32 @@ class EclairDialog(QDialog):
             from etk.edb.const import SHEET_NAMES
             valid_sheets = [sheet.title for sheet in workbook.worksheets if sheet.title in SHEET_NAMES]
             
-            checkboxDialog = CheckboxDialog(self,valid_sheets)
+            checkboxDialog = CheckboxDialog(self,valid_sheets, self.dry_run)
             result = checkboxDialog.exec_()  # Show the dialog as a modal dialog
             if result == QDialog.Accepted:
                 sheets = checkboxDialog.sheet_names
             else:
-                message_box('Importing progress','importing all valid sheets '+str(valid_sheets))
+                if self.dry_run:
+                    message_box('Validation progress','validating all valid sheets '+str(valid_sheets))
+                else:
+                    message_box('Importing progress','importing all valid sheets '+str(valid_sheets))
                 sheets = SHEET_NAMES
             
             from etk.tools.utils import CalledProcessError, run_import
             try:
-                # specify db_path here?
                 (stdout, stderr) = run_import(file_path, str(sheets), dry_run=self.dry_run)
-                tableDialog = TableDialog(self,'Import status','Imported pointsourceactivities successfully ',stdout.decode("utf-8"))
-                tableDialog.exec_()  # Show the dialog as a modal dialog
+                if self.dry_run:
+                    tableDialog = TableDialog(self,'Validation status','Validated file with pointsourceactivities successfully ',stdout.decode("utf-8"))
+                    tableDialog.exec_() 
+                else:
+                    tableDialog = TableDialog(self,'Import status','Imported pointsourceactivities successfully ',stdout.decode("utf-8"))
+                    tableDialog.exec_()  
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
                     message_box('Error',f"Error: a target database is not specified yet,"
                     +" choose an existing or create a new database first.")
                 else:
-                    #  (Exit Code {e.returncode})
                     import_error = error.split('ImportError:')[-1]
                     message_box('Import error',f"Error: {import_error}")
         else:
@@ -258,16 +263,19 @@ def message_box(title,text):
     msg_box.exec_()
 
 class CheckboxDialog(QDialog):
-    def __init__(self, parent=None, box_labels=None):
+    def __init__(self, parent=None, box_labels=None, dry_run=False):
         super().__init__(parent)
         self.box_labels = box_labels
+        self.dry_run = dry_run
         self.initUI()
 
     def initUI(self):
         # Create a layout for the dialog
         layout = QVBoxLayout()
-
-        label = QLabel("Choose sheets to import:")
+        if self.dry_run:
+            label = QLabel("Choose sheets to validate:")
+        else:
+            label = QLabel("Choose sheets to import:")
         layout.addWidget(label)
 
         # Create checkboxes for each element in the list
@@ -281,7 +289,10 @@ class CheckboxDialog(QDialog):
         # Set the layout for the dialog
         self.setLayout(layout)
 
-        btn_action_import_sheets = QPushButton("Import sheets")
+        if self.dry_run:
+            btn_action_import_sheets = QPushButton("Validate sheets")
+        else:
+            btn_action_import_sheets = QPushButton("Import sheets")
         layout.addWidget(btn_action_import_sheets)
         btn_action_import_sheets.clicked.connect(self.import_sheets_dialog)
 
@@ -294,18 +305,20 @@ class CheckboxDialog(QDialog):
 
 
 class TableDialog(QDialog):
-    def __init__(self,parent=None, title=None, text=None, table_dict=None):
+    def __init__(self,parent=None, title=None, text=None, stdout=None):
         super().__init__()
         self.title = title
         self.text = text
-        self.table_dict = table_dict
+        self.stdout = stdout
         self.initUI()
 
     def initUI(self):
-        # convert string to dict
-        table_dict = ast.literal_eval(self.table_dict)
+        # convert stdout to tuple 
+        stdout = ast.literal_eval(self.stdout)
+        (table_dict, return_message) = stdout
 
-        # TODO: do not know whether timevar is updated or created, skipping for now
+        # TODO: do not know whether timevar is updated or created, 
+        # skipping for now because that means it does not fit in table
         if 'timevar' in table_dict:
             table_dict.pop('timevar')
 
@@ -336,5 +349,9 @@ class TableDialog(QDialog):
         # Resize the columns to fit the content
         tableWidget.resizeColumnsToContents()
         layout.addWidget(tableWidget)
+
+        label = QLabel(return_message)
+        layout.addWidget(label)
+
         # Set the layout for the dialog
         self.setLayout(layout)
