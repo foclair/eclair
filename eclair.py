@@ -153,7 +153,7 @@ class EclairDialog(QDialog):
         label = QLabel("Functions for calculating previously imported data.", self.tab_calculate)
         layout_calculate.addWidget(label)
 
-        btn_action_create_table = QPushButton(" Create table all pointsources ", self.tab_calculate)
+        btn_action_create_table = QPushButton(" Create table all pointsources, combining direct emissions and activities ", self.tab_calculate)
         layout_calculate.addWidget(btn_action_create_table)
         btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
 
@@ -183,14 +183,14 @@ class EclairDialog(QDialog):
         self.db_label.setText(f"Eclair is currently connected to database:\n {db_path}")
 
     def load_existing_database_dialog(self):
-            db_path, _ = QFileDialog.getOpenFileName(None, "Open SQLite database", "", "Database (*.sqlite)")
-            if db_path == '':
-                # user cancelled
-                message_box('Warning','No file chosen, database not configured.')
-            else:
-                os.environ["ETK_DATABASE_PATH"] = db_path
-                self.update_db_label()
-                message_box('Load database',f"Database succesfully chosen database {db_path}.")
+        db_path, _ = QFileDialog.getOpenFileName(None, "Open SQLite database", "", "Database (*.sqlite)")
+        if db_path == '':
+            # user cancelled
+            message_box('Warning','No file chosen, database not configured.')
+        else:
+            os.environ["ETK_DATABASE_PATH"] = db_path
+            self.update_db_label()
+            message_box('Load database',f"Database succesfully chosen database {db_path}.")
 
     def create_new_database_dialog(self):
         db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.sqlite)")
@@ -219,7 +219,7 @@ class EclairDialog(QDialog):
         self.import_pointsourceactivities_dialog()
 
     def import_pointsourceactivities_dialog(self):
-        file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsourceactivities file", "", "Spreadsheet files (*.xlsx);; Comma-separated files (*.csv)")
+        file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsourceactivities file", "", "Spreadsheet files (*.xlsx)")
         if file_path: #if file_path not empty string (user did not click cancel)
             from openpyxl import load_workbook
             workbook = load_workbook(filename=file_path, data_only=True)
@@ -261,8 +261,9 @@ class EclairDialog(QDialog):
 
     def create_emission_table_dialog(self):
         from etk.tools.utils import CalledProcessError, run_update_emission_tables
+        db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         try:
-            (stdout, stderr) = run_update_emission_tables()
+            (stdout, stderr) = run_update_emission_tables(db_path)
             message_box('Created emission table',"Successfully created emission table")
         except CalledProcessError as e:
             error = e.stderr.decode("utf-8")
@@ -270,15 +271,19 @@ class EclairDialog(QDialog):
 
     def aggregate_emissions_dialog(self):
         from etk.tools.utils import CalledProcessError, run_aggregate_emissions
-        try:
-            #TODO give user choice which codeset to aggregate from;
-            #  how to know which exist?
-            filename='/home/a002469/Documents/InventoryToolkit/'
-            (stdout, stderr) = run_aggregate_emissions(filename,codeset='code_set1')
-            message_box('Aggregate emissions',"Successfully aggregated emissions.")
-        except CalledProcessError as e:
-            error = e.stderr.decode("utf-8")
-            message_box('Import error',f"Error: {error}")
+        filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.csv)")
+        if (filename == '') or (filename.split('.')[-1] !='csv'):
+            # user cancelled
+            message_box('Warning','No *.csv file chosen, aggregated table not created.')
+        else:
+            try:
+                #TODO give user choice which codeset to aggregate from;
+                #  how to know which exist?
+                (stdout, stderr) = run_aggregate_emissions(filename,codeset='code_set1')
+                message_box('Aggregate emissions',"Successfully aggregated emissions.")
+            except CalledProcessError as e:
+                error = e.stderr.decode("utf-8")
+                message_box('Import error',f"Error: {error}")
 
 def show_help(self):
     """Display application help to the user."""
