@@ -153,7 +153,7 @@ class EclairDialog(QDialog):
         label = QLabel("Functions for calculating previously imported data.", self.tab_calculate)
         layout_calculate.addWidget(label)
 
-        btn_action_create_table = QPushButton(" Create table all pointsources, combining direct emissions and activities ", self.tab_calculate)
+        btn_action_create_table = QPushButton(" Create table all pointsources and areasources, combining direct emissions and activities ", self.tab_calculate)
         layout_calculate.addWidget(btn_action_create_table)
         btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
 
@@ -378,7 +378,11 @@ class TableDialog(QDialog):
             item = QTableWidgetItem(str(table_dict[key]['updated']))
             tableWidget.setItem(row, 1, item)
 
-        # Set headers for the table
+        # Set headers for the table, TO DO adapt for validation
+        # if self.dry_run:
+        #     tableWidget.setHorizontalHeaderLabels(['to be created', 'to be updated'])
+        #     tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
+        # else:
         tableWidget.setHorizontalHeaderLabels(['created', 'updated'])
         tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
 
