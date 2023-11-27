@@ -58,8 +58,8 @@ class Eclair:
 
     def run(self):
         dialog = EclairDialog(self)
-        # dialog.show() modeles with show, but then no other dialogs appear??
-        dialog.exec_()        
+        dialog.show() # modeless with show, but then no other dialogs appear??
+        # dialog.exec_()        
 
         #dlg = QDialog(iface.mainWindow())
         # app = QApplication(sys.argv)
