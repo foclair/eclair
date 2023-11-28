@@ -42,43 +42,30 @@ ETK_BINPATH = os.path.expanduser("~/.local/bin")
 os.environ["PATH"] += f":{ETK_BINPATH}"
 sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 
-class Eclair:
-    def __init__(self, iface):
-        self.iface = iface
-
-    def initGui(self):
-        self.action = QAction('Eclair!', self.iface.mainWindow())
-        self.action.triggered.connect(self.run)
-        self.iface.addToolBarIcon(self.action)
-
-
-    def unload(self):
-        self.iface.removeToolBarIcon(self.action)
-        del self.action
-
-    def run(self):
-        dialog = EclairDialog(self)
-        dialog.show() # modeless with show, but then no other dialogs appear??
-        # dialog.exec_()        
-
-        #dlg = QDialog(iface.mainWindow())
-        # app = QApplication(sys.argv)
-        #window = EclairDialog()
-        #window.show()
-        # sys.exit(app.exec_())
-
        
-class EclairDialog(QDialog):
-    def __init__(self,parent=None):
-        super(EclairDialog, self).__init__(iface.mainWindow())
+class Eclair(QWidget):
+    def __init__(self, iface):
+        super(Eclair, self).__init__()
+        self.iface = iface
         self.setWindowTitle("ECLAIR")
         self.init_ui()
 
+    def initGui(self):
+        # Create a QAction for the plugin
+        self.action = QAction("Eclair!", self)
+        self.action.triggered.connect(self.run)
+        # Add the plugin action to the QGIS toolbar
+        self.iface.addToolBarIcon(self.action)
+    
+    def unload(self):
+        self.iface.removeToolBarIcon(self.action)
+        del self.action
+    
     def init_ui(self):
         default_font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
         italic_font = default_font
         italic_font.setItalic(True)
-
+        self.setWindowTitle('Eclair')
         self.setGeometry(100, 100, 800, 300)
         self.tab_widget = QTabWidget(self)
         self.tab_widget.setGeometry(0,0, 795, 295)
@@ -158,14 +145,12 @@ class EclairDialog(QDialog):
         btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
 
         btn_action_aggregate = QPushButton(" Aggregate emissions per sector ", self.tab_calculate)
-        #btn_action_aggregate.setFont(italic_font)
         layout_calculate.addWidget(btn_action_aggregate)
         btn_action_aggregate.clicked.connect(self.aggregate_emissions_dialog)
 
         btn_action_raster = QPushButton(" Calculate raster of emissions ", self.tab_calculate)
         btn_action_raster.setFont(italic_font)
         layout_calculate.addWidget(btn_action_raster)
-
 
         # Visualize emissions
         layout_visualize = QVBoxLayout()
@@ -183,7 +168,7 @@ class EclairDialog(QDialog):
         self.db_label.setText(f"Eclair is currently connected to database:\n {db_path}")
 
     def load_existing_database_dialog(self):
-        db_path, _ = QFileDialog.getOpenFileName(None, "Open SQLite database", "", "Database (*.sqlite)")
+        db_path, _ = QFileDialog.getOpenFileName(self.tab_db, "Open SQLite database", "", "Database (*.sqlite)")
         if db_path == '':
             # user cancelled
             message_box('Warning','No file chosen, database not configured.')
@@ -260,6 +245,7 @@ class EclairDialog(QDialog):
             message_box('Import error','No file chosen, no data imported.')
 
     def create_emission_table_dialog(self):
+        #TODO catch exception if database does not have any emissions imported yet
         from etk.tools.utils import CalledProcessError, run_update_emission_tables
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         try:
@@ -270,6 +256,7 @@ class EclairDialog(QDialog):
             message_box('Import error',f"Error: {error}")
 
     def aggregate_emissions_dialog(self):
+        #TODO catch exception if table not created yet, or create table on the fly in that case?
         from etk.tools.utils import CalledProcessError, run_aggregate_emissions
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.csv)")
         if (filename == '') or (filename.split('.')[-1] !='csv'):
@@ -284,6 +271,20 @@ class EclairDialog(QDialog):
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 message_box('Import error',f"Error: {error}")
+    def initGui(self):
+        self.action = QAction('Eclair!', self.iface.mainWindow())
+        self.action.triggered.connect(self.run)
+        self.iface.addToolBarIcon(self.action)
+
+
+    def unload(self):
+        self.iface.removeToolBarIcon(self.action)
+        del self.action
+
+    def run(self):
+        # Show the widget when the plugin is triggered
+        self.show()
+
 
 def show_help(self):
     """Display application help to the user."""
@@ -337,7 +338,6 @@ class CheckboxDialog(QDialog):
         self.sheet_names = [label for label in self.box_labels if self.checkboxes[label].isChecked()]
         # close the checkbox dialog
         self.accept()
-
 
 
 class TableDialog(QDialog):
@@ -395,3 +395,6 @@ class TableDialog(QDialog):
 
         # Set the layout for the dialog
         self.setLayout(layout)
+
+# Instantiate the plugin class with the QGIS interface
+# eclair_plugin = Eclair(iface)
