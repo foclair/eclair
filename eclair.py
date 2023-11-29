@@ -29,6 +29,8 @@ from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase
 from PyQt5.QtCore import Qt
 from qgis.utils import iface
+from qgis.core import QgsVectorLayer, QgsProject, QgsDataSourceUri, QgsCoordinateReferenceSystem
+import time
 
 import os
 import sys
@@ -42,6 +44,9 @@ ETK_BINPATH = os.path.expanduser("~/.local/bin")
 os.environ["PATH"] += f":{ETK_BINPATH}"
 sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 
+
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
        
 class Eclair(QWidget):
     def __init__(self, iface):
@@ -157,9 +162,12 @@ class Eclair(QWidget):
         self.tab_visualize.setLayout(layout_visualize)
         label = QLabel("Functions for visualizing previously imported data.", self.tab_visualize)
         layout_visualize.addWidget(label)
-        btn_action_visualize = QPushButton(" visualize all geographic data ", self.tab_visualize)
-        btn_action_visualize.setFont(italic_font)
-        layout_visualize.addWidget(btn_action_visualize)
+        btn_action_visualize_point = QPushButton(" Visualize pointsources ", self.tab_visualize)
+        layout_visualize.addWidget(btn_action_visualize_point)
+        btn_action_visualize_point.clicked.connect(self.load_pointsource_canvas)
+        btn_action_visualize_area = QPushButton(" Visualize areasources ", self.tab_visualize)
+        layout_visualize.addWidget(btn_action_visualize_area)
+        btn_action_visualize_area.clicked.connect(self.load_areasource_canvas)
         # Set the tab widget as the central widget
         # self.setCentralWidget(self.tab_widget)
 
@@ -271,6 +279,59 @@ class Eclair(QWidget):
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 message_box('Import error',f"Error: {error}")
+
+    def setup_watcher(self):
+        # Set up the watchdog observer
+        self.event_handler = self.FileChangeHandler(self)
+        self.observer = Observer()
+        self.observer.schedule(self.event_handler, path='.', recursive=False)
+        self.observer.start()
+
+    def load_pointsource_canvas(self):
+        self.source_type = 'point'
+        self.load_data()
+
+    def load_areasource_canvas(self):
+        self.source_type = 'area'
+        self.load_data()
+
+    def load_data(self):
+        # Get the path to the SQLite database file
+        self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+        if self.db_path == "Database not set yet.":
+            message_box('Warning','Cannot load layer, database not chosen yet.')
+            return
+        db_name = os.path.basename(self.db_path).split('.')[0]
+        # Connect to the database
+        uri = QgsDataSourceUri()
+        uri.setDatabase(self.db_path)
+        schema = ''
+        if self.source_type =='point':
+            table = 'edb_pointsource'
+            display_name = db_name + '-PointSource'
+        elif self.source_type == 'area':
+            table = 'edb_areasource'
+            display_name = db_name + '-AreaSource'
+        else:
+            message_box('Warning',f"Cannot load layer, sourcetype {source_type} unknown.")
+        geom_column = 'geom'
+        uri.setDataSource(schema, table, geom_column)
+        self.layer = QgsVectorLayer(uri.uri(), display_name, 'spatialite')
+        crs = QgsCoordinateReferenceSystem('EPSG:4326')
+        self.layer.setCrs(crs)
+        QgsProject.instance().addMapLayer(self.layer)
+        message_box("Info",f"Data loaded from {self.db_path}")
+
+    class FileChangeHandler(FileSystemEventHandler):
+        def __init__(self, file_handler):
+            self.file_handler = file_handler
+        def on_any_event(self, event):
+            if event.is_directory:
+                return
+            elif event.event_type == 'modified' and event.src_path == self.file_handler.db_path:
+                print(f"Reloading layer due to changes in {event.src_path}")
+                self.file_handler.layer.reload()
+
     def initGui(self):
         self.action = QAction('Eclair!', self.iface.mainWindow())
         self.action.triggered.connect(self.run)
