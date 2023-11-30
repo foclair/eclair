@@ -54,6 +54,8 @@ class Eclair(QWidget):
         self.iface = iface
         self.setWindowTitle("ECLAIR")
         self.init_ui()
+        # To automatically update database changes in visualized layer
+        self.setup_watcher()
 
     def initGui(self):
         # Create a QAction for the plugin
@@ -300,7 +302,8 @@ class Eclair(QWidget):
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
-            return
+            return 
+            
         db_name = os.path.basename(self.db_path).split('.')[0]
         # Connect to the database
         uri = QgsDataSourceUri()
@@ -321,6 +324,7 @@ class Eclair(QWidget):
         self.layer.setCrs(crs)
         QgsProject.instance().addMapLayer(self.layer)
         message_box("Info",f"Data loaded from {self.db_path}")
+        #todo-check if a similar layer is loaded already? or should be allowed to load twice?
 
     class FileChangeHandler(FileSystemEventHandler):
         def __init__(self, file_handler):
