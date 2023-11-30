@@ -164,12 +164,12 @@ class Eclair(QWidget):
         self.tab_visualize.setLayout(layout_visualize)
         label = QLabel("Functions for visualizing previously imported data.", self.tab_visualize)
         layout_visualize.addWidget(label)
-        btn_action_visualize_point = QPushButton(" Visualize pointsources ", self.tab_visualize)
+        btn_action_visualize_point = QPushButton(" Visualize sources ", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_point)
-        btn_action_visualize_point.clicked.connect(self.load_pointsource_canvas)
-        btn_action_visualize_area = QPushButton(" Visualize areasources ", self.tab_visualize)
-        layout_visualize.addWidget(btn_action_visualize_area)
-        btn_action_visualize_area.clicked.connect(self.load_areasource_canvas)
+        btn_action_visualize_point.clicked.connect(self.load_data)
+        # btn_action_visualize_area = QPushButton(" Visualize areasources ", self.tab_visualize)
+        # layout_visualize.addWidget(btn_action_visualize_area)
+        # btn_action_visualize_area.clicked.connect(self.load_areasource_canvas)
         # Set the tab widget as the central widget
         # self.setCentralWidget(self.tab_widget)
 
@@ -303,38 +303,51 @@ class Eclair(QWidget):
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
             return 
-            
+        self.load_all_sources()
+        message_box('Progress',f"Data loaded from {self.db_path}")
+    
+    def load_all_sources(self):
+        self.tables = ['edb_pointsource','edb_areasource']
         db_name = os.path.basename(self.db_path).split('.')[0]
+        self.display_names = {'edb_pointsource':db_name+'PointSource','edb_areasource': db_name+'AreaSource'}
+        for self.table in self.tables:
+            self.display_name = self.display_names[self.table]
+            self.load_layer()
+    
+    def load_layer(self):
         # Connect to the database
         uri = QgsDataSourceUri()
         uri.setDatabase(self.db_path)
         schema = ''
-        if self.source_type =='point':
-            table = 'edb_pointsource'
-            display_name = db_name + '-PointSource'
-        elif self.source_type == 'area':
-            table = 'edb_areasource'
-            display_name = db_name + '-AreaSource'
-        else:
-            message_box('Warning',f"Cannot load layer, sourcetype {source_type} unknown.")
         geom_column = 'geom'
-        uri.setDataSource(schema, table, geom_column)
-        self.layer = QgsVectorLayer(uri.uri(), display_name, 'spatialite')
+        uri.setDataSource(schema, self.table, geom_column)
+        self.layer = QgsVectorLayer(uri.uri(), self.display_name, 'spatialite')
         crs = QgsCoordinateReferenceSystem('EPSG:4326')
         self.layer.setCrs(crs)
         QgsProject.instance().addMapLayer(self.layer)
-        message_box("Info",f"Data loaded from {self.db_path}")
-        #todo-check if a similar layer is loaded already? or should be allowed to load twice?
 
     class FileChangeHandler(FileSystemEventHandler):
         def __init__(self, file_handler):
             self.file_handler = file_handler
+            self.last_modified_times = {}
         def on_any_event(self, event):
             if event.is_directory:
                 return
             elif event.event_type == 'modified' and event.src_path == self.file_handler.db_path:
-                print(f"Reloading layer due to changes in {event.src_path}")
-                self.file_handler.layer.reload()
+                # Check which tables have been modified and reload only those
+                for table in self.file_handler.tables:
+                    table_path = f"{self.file_handler.db_path}.{table}"
+                    last_modified_time = self.last_modified_times.get(table, None)
+                    # Get the current modification time
+                    current_modified_time = QDateTime().currentDateTime().toMSecsSinceEpoch()
+                    if last_modified_time is None or current_modified_time > last_modified_time:
+                        # the new point shows up, but the message box does not, why not?
+                        message_box("NOTE","Reloading {table} due to changes in {event.src_path}")
+                        self.file_handler.table = table
+                        self.file_handler.display_name = self.file_handler.display_names[table]
+                        self.file_handler.load_layer()
+                        self.last_modified_times[table] = current_modified_time
+
 
     def initGui(self):
         self.action = QAction('Eclair!', self.iface.mainWindow())
