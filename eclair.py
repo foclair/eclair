@@ -89,7 +89,7 @@ class Eclair(QWidget):
         self.tab_widget.addTab(self.tab_edit, "Edit Data")
         self.tab_widget.addTab(self.tab_export, "Export Data")
         self.tab_widget.addTab(self.tab_calculate, "Analyse Emissions")
-        self.tab_widget.addTab(self.tab_visualize, "Visualize Emissions")
+        self.tab_widget.addTab(self.tab_visualize, "Load Layers")
 
         # Database
         layout_db = QVBoxLayout()
@@ -164,7 +164,7 @@ class Eclair(QWidget):
         self.tab_visualize.setLayout(layout_visualize)
         label = QLabel("Functions for visualizing previously imported data.", self.tab_visualize)
         layout_visualize.addWidget(label)
-        btn_action_visualize_point = QPushButton(" Visualize sources ", self.tab_visualize)
+        btn_action_visualize_point = QPushButton(" Load layers to canvas ", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_point)
         btn_action_visualize_point.clicked.connect(self.load_data)
         # btn_action_visualize_area = QPushButton(" Visualize areasources ", self.tab_visualize)
