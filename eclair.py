@@ -53,29 +53,48 @@ class Eclair(QWidget):
         super(Eclair, self).__init__()
         self.iface = iface
         self.setWindowTitle("ECLAIR")
-        self.init_ui()
-        # To automatically update database changes in visualized layer
-        self.setup_watcher()
+        self.dock_widget = None  # Initialize the dock widget        
 
     def initGui(self):
-        # Create a QAction for the plugin
-        self.action = QAction("Eclair!", self)
+        self.action = QAction('Eclair!', self.iface.mainWindow())
         self.action.triggered.connect(self.run)
-        # Add the plugin action to the QGIS toolbar
         self.iface.addToolBarIcon(self.action)
     
     def unload(self):
         self.iface.removeToolBarIcon(self.action)
         del self.action
+
+    def run(self):
+        # Show the widget when the plugin is triggered
+        self.show_dock_panel()
     
-    def init_ui(self):
+    def show_dock_panel(self):
+        # Create or show the dock widget
+        if self.dock_widget is None:
+            self.dock_widget = EclairDock(self.iface.mainWindow())
+            self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+        self.dock_widget.show()
+
+
+class EclairDock(QDockWidget):
+    def __init__(self, parent):
+        super().__init__("ECLAIR", parent)
+        self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        # Create a main widget for the dock widget
+        self.main_widget = QWidget(self)
+        self.setWidget(self.main_widget)
+        # Set the minimum height for the dock widget
+        self.setMinimumHeight(200) 
+        # Set the layout for the main widget
+        layout = QVBoxLayout(self.main_widget)
+        self.tab_widget = QTabWidget(self.main_widget)
+        layout.addWidget(self.tab_widget)
+
+        # To automatically update database changes in visualized layer
+        self.setup_watcher()
         default_font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
         italic_font = default_font
         italic_font.setItalic(True)
-        self.setWindowTitle('Eclair')
-        self.setGeometry(100, 100, 800, 300)
-        self.tab_widget = QTabWidget(self)
-        self.tab_widget.setGeometry(0,0, 795, 295)
         # Create tabs
         self.tab_db = QWidget()
         self.tab_import = QWidget()
@@ -349,21 +368,6 @@ class Eclair(QWidget):
                         self.file_handler.display_name = self.file_handler.display_names[table]
                         self.file_handler.load_layer()
                         self.last_modified_times[table] = current_modified_time
-
-
-    def initGui(self):
-        self.action = QAction('Eclair!', self.iface.mainWindow())
-        self.action.triggered.connect(self.run)
-        self.iface.addToolBarIcon(self.action)
-
-
-    def unload(self):
-        self.iface.removeToolBarIcon(self.action)
-        del self.action
-
-    def run(self):
-        # Show the widget when the plugin is triggered
-        self.show()
 
 
 def show_help(self):
