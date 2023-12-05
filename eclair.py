@@ -421,9 +421,10 @@ class CheckboxDialog(QDialog):
 
 
 class TableDialog(QDialog):
-    def __init__(self,parent=None, title=None, text=None, stdout=None):
+    def __init__(self,plugin, title=None, text=None, stdout=None):
         super().__init__()
         self.title = title
+        self.plugin = plugin
         self.text = text
         self.stdout = stdout
         self.initUI()
@@ -434,19 +435,15 @@ class TableDialog(QDialog):
         (table_dict, return_message) = stdout
 
         # TODO: do not know whether timevar is updated or created, 
-        # skipping for now because that means it does not fit in table
+        # skipping from progress tabel for now
         if 'timevar' in table_dict:
             table_dict.pop('timevar')
-
         nr_rows = len(table_dict.keys())
-
-        # self.setGeometry(100, 100, 400, 300)
         self.setWindowTitle(self.title)
 
         layout = QVBoxLayout()
         label = QLabel(self.text)
         layout.addWidget(label)
-
 
         tableWidget = QTableWidget(self)
         tableWidget.setRowCount(nr_rows)
@@ -459,12 +456,12 @@ class TableDialog(QDialog):
             tableWidget.setItem(row, 1, item)
 
         # Set headers for the table, TO DO adapt for validation
-        # if self.dry_run:
-        #     tableWidget.setHorizontalHeaderLabels(['to be created', 'to be updated'])
-        #     tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
-        # else:
-        tableWidget.setHorizontalHeaderLabels(['created', 'updated'])
-        tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
+        if self.plugin.dry_run:
+            tableWidget.setHorizontalHeaderLabels(['to be created', 'to be updated'])
+            tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
+        else:
+            tableWidget.setHorizontalHeaderLabels(['created', 'updated'])
+            tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
 
         # Resize the columns to fit the content
         tableWidget.resizeColumnsToContents()
@@ -476,5 +473,3 @@ class TableDialog(QDialog):
         # Set the layout for the dialog
         self.setLayout(layout)
 
-# Instantiate the plugin class with the QGIS interface
-# eclair_plugin = Eclair(iface)
