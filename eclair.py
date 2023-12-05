@@ -22,7 +22,7 @@
 
 
 
-from PyQt5.QtWidgets import QApplication, QAction, QWidget, QTableWidget, QTableWidgetItem
+from PyQt5.QtWidgets import QApplication, QAction, QWidget, QDockWidget, QTableWidget, QTableWidgetItem
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox
 from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup, QTabWidget, QMainWindow #, QLineEdit
 from PyQt5.QtCore import QUrl
@@ -309,7 +309,9 @@ class Eclair(QWidget):
     def load_all_sources(self):
         self.tables = ['edb_pointsource','edb_areasource']
         db_name = os.path.basename(self.db_path).split('.')[0]
-        self.display_names = {'edb_pointsource':db_name+'PointSource','edb_areasource': db_name+'AreaSource'}
+        # Create a group layer
+        self.group = QgsProject.instance().layerTreeRoot().addGroup(db_name)
+        self.display_names = {'edb_pointsource':'PointSource','edb_areasource':'AreaSource'}
         for self.table in self.tables:
             self.display_name = self.display_names[self.table]
             self.load_layer()
@@ -324,7 +326,7 @@ class Eclair(QWidget):
         self.layer = QgsVectorLayer(uri.uri(), self.display_name, 'spatialite')
         crs = QgsCoordinateReferenceSystem('EPSG:4326')
         self.layer.setCrs(crs)
-        QgsProject.instance().addMapLayer(self.layer)
+        self.group.addLayer(self.layer)
 
     class FileChangeHandler(FileSystemEventHandler):
         def __init__(self, file_handler):
