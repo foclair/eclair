@@ -103,11 +103,11 @@ class EclairDock(QDockWidget):
         self.tab_calculate = QWidget()
         self.tab_visualize = QWidget()
         # Add tabs to the tab widget
-        self.tab_widget.addTab(self.tab_db, "Database Settings")
-        self.tab_widget.addTab(self.tab_import, "Import Data")
-        self.tab_widget.addTab(self.tab_edit, "Edit Data")
-        self.tab_widget.addTab(self.tab_export, "Export Data")
-        self.tab_widget.addTab(self.tab_calculate, "Analyse Emissions")
+        self.tab_widget.addTab(self.tab_db, "DB Settings")
+        self.tab_widget.addTab(self.tab_import, "Import")
+        self.tab_widget.addTab(self.tab_edit, "Edit")
+        self.tab_widget.addTab(self.tab_export, "Export")
+        self.tab_widget.addTab(self.tab_calculate, "Analyse")
         self.tab_widget.addTab(self.tab_visualize, "Load Layers")
 
         # Database
@@ -115,59 +115,59 @@ class EclairDock(QDockWidget):
         self.tab_db.setLayout(layout_db)
         self.db_label = QLabel(self)
         self.update_db_label()
-        layout_db.addWidget(self.db_label)
+        layout_db.addWidget(self.db_label, alignment=Qt.AlignTop)
 
         btn_action_existing_database = QPushButton("Choose existing database to edit", self.tab_db)
-        layout_db.addWidget(btn_action_existing_database)
+        layout_db.addWidget(btn_action_existing_database, alignment=Qt.AlignTop)
         btn_action_existing_database.clicked.connect(self.load_existing_database_dialog)
 
         btn_action_new_database = QPushButton("Create and connect to new database", self.tab_db)
-        layout_db.addWidget(btn_action_new_database)
+        layout_db.addWidget(btn_action_new_database, alignment=Qt.AlignTop)
         btn_action_new_database.clicked.connect(self.create_new_database_dialog)
 
         # Import
         layout_import = QVBoxLayout()
         self.tab_import.setLayout(layout_import)
         label = QLabel("Import data to your database (*.xlsx):", self.tab_import)
-        layout_import.addWidget(label)
+        layout_import.addWidget(label, alignment=Qt.AlignTop)
 
         btn_action_import_pointsourceactivities = QPushButton("Import data from spreadsheet", self.tab_import)
-        layout_import.addWidget(btn_action_import_pointsourceactivities)
+        layout_import.addWidget(btn_action_import_pointsourceactivities, alignment=Qt.AlignTop)
         btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsources)
 
         btn_action_validate_pointsourceactivities = QPushButton("Validate spreadsheet without importing", self.tab_import)
-        layout_import.addWidget(btn_action_validate_pointsourceactivities)
+        layout_import.addWidget(btn_action_validate_pointsourceactivities, alignment=Qt.AlignTop)
         btn_action_validate_pointsourceactivities.clicked.connect(self.validate_pointsources)
 
         # Edit
         layout_edit = QVBoxLayout()
         self.tab_edit.setLayout(layout_edit)
         label = QLabel("Functions for editing previously imported data.", self.tab_edit)
-        layout_edit.addWidget(label)
+        layout_edit.addWidget(label, alignment=Qt.AlignTop)
         btn_action_edit = QPushButton(" Edit imported data ", self.tab_edit)
         btn_action_edit.setFont(italic_font)
-        layout_edit.addWidget(btn_action_edit)
+        layout_edit.addWidget(btn_action_edit, alignment=Qt.AlignTop)
 
         # Export
         layout_export = QVBoxLayout()
         self.tab_export.setLayout(layout_export)
         label = QLabel("Functions for exporting previously imported data.", self.tab_export)
-        layout_export.addWidget(label)
+        layout_export.addWidget(label, alignment=Qt.AlignTop)
         btn_action_export_all = QPushButton(" Export all imported data ", self.tab_export)
         btn_action_export_all.setFont(italic_font)
-        layout_export.addWidget(btn_action_export_all)
+        layout_export.addWidget(btn_action_export_all, alignment=Qt.AlignTop)
         btn_action_export = QPushButton(" Export only pointsources, areasources or road sources ", self.tab_export)
         btn_action_export.setFont(italic_font)
-        layout_export.addWidget(btn_action_export)
+        layout_export.addWidget(btn_action_export, alignment=Qt.AlignTop)
 
         # Calculate emissions
         layout_calculate = QVBoxLayout()
         self.tab_calculate.setLayout(layout_calculate)
         label = QLabel("Functions for calculating previously imported data.", self.tab_calculate)
-        layout_calculate.addWidget(label)
+        layout_calculate.addWidget(label, alignment=Qt.AlignTop)
 
         btn_action_create_table = QPushButton(" Create table all pointsources and areasources, combining direct emissions and activities ", self.tab_calculate)
-        layout_calculate.addWidget(btn_action_create_table)
+        layout_calculate.addWidget(btn_action_create_table, alignment=Qt.AlignTop)
         btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
 
         btn_action_aggregate = QPushButton(" Aggregate emissions per sector ", self.tab_calculate)
@@ -176,15 +176,15 @@ class EclairDock(QDockWidget):
 
         btn_action_raster = QPushButton(" Calculate raster of emissions ", self.tab_calculate)
         btn_action_raster.setFont(italic_font)
-        layout_calculate.addWidget(btn_action_raster)
+        layout_calculate.addWidget(btn_action_raster, alignment=Qt.AlignTop)
 
         # Visualize emissions
         layout_visualize = QVBoxLayout()
         self.tab_visualize.setLayout(layout_visualize)
         label = QLabel("Functions for visualizing previously imported data.", self.tab_visualize)
-        layout_visualize.addWidget(label)
+        layout_visualize.addWidget(label, alignment=Qt.AlignTop)
         btn_action_visualize_point = QPushButton(" Load layers to canvas ", self.tab_visualize)
-        layout_visualize.addWidget(btn_action_visualize_point)
+        layout_visualize.addWidget(btn_action_visualize_point, alignment=Qt.AlignTop)
         btn_action_visualize_point.clicked.connect(self.load_data)
         # btn_action_visualize_area = QPushButton(" Visualize areasources ", self.tab_visualize)
         # layout_visualize.addWidget(btn_action_visualize_area)
