@@ -91,7 +91,9 @@ class EclairDock(QDockWidget):
         layout.addWidget(self.tab_widget)
 
         # To automatically update database changes in visualized layer
-        self.setup_watcher()
+        # self.setup_watcher()
+        # watcher not necessary for point and area sources, reloaded from sqlite
+        # as soon as view of canvas changes (zoom etc)
         default_font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
         italic_font = default_font
         italic_font.setItalic(True)
@@ -189,6 +191,7 @@ class EclairDock(QDockWidget):
         self.tab_visualize.setLayout(layout_visualize)
         label = QLabel("Functions for visualizing previously imported data.", self.tab_visualize)
         layout_visualize.addWidget(label)
+
         btn_action_visualize_point = QPushButton(" Load layers to canvas ", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_point)
         btn_action_visualize_point.clicked.connect(self.load_data)
@@ -314,14 +317,6 @@ class EclairDock(QDockWidget):
         self.observer.schedule(self.event_handler, path='.', recursive=False)
         self.observer.start()
 
-    def load_pointsource_canvas(self):
-        self.source_type = 'point'
-        self.load_data()
-
-    def load_areasource_canvas(self):
-        self.source_type = 'area'
-        self.load_data()
-
     def load_data(self):
         # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
@@ -333,25 +328,29 @@ class EclairDock(QDockWidget):
     
     def load_all_sources(self):
         self.tables = ['edb_pointsource','edb_areasource']
-        db_name = os.path.basename(self.db_path).split('.')[0]
+        self.db_name = os.path.basename(self.db_path).split('.')[0]
         # Create a group layer
-        self.group = QgsProject.instance().layerTreeRoot().addGroup(db_name)
-        self.display_names = {'edb_pointsource':'PointSource','edb_areasource':'AreaSource'}
-        for self.table in self.tables:
-            self.display_name = self.display_names[self.table]
-            self.load_layer()
+        self.group = QgsProject.instance().layerTreeRoot().addGroup(self.db_name)
+        self.display_names = {'edb_pointsource':'PointSource','edb_areasource':'AreaSource'} 
+        self.table = 'edb_pointsource'
+        self.define_uri()
+        self.pointlayer = QgsVectorLayer(self.uri.uri(), self.display_name, 'spatialite')   
+        self.group.addLayer(self.pointlayer)
+        self.table = 'edb_areasource'
+        self.define_uri()
+        self.arealayer = QgsVectorLayer(self.uri.uri(), self.display_name, 'spatialite')   
+        self.group.addLayer(self.arealayer)
     
-    def load_layer(self):
+    def define_uri(self):
         # Connect to the database
-        uri = QgsDataSourceUri()
-        uri.setDatabase(self.db_path)
+        self.display_name = self.display_names[self.table]
+        self.uri = QgsDataSourceUri()
+        self.uri.setDatabase(self.db_path)
         schema = ''
         geom_column = 'geom'
-        uri.setDataSource(schema, self.table, geom_column)
-        self.layer = QgsVectorLayer(uri.uri(), self.display_name, 'spatialite')
-        crs = QgsCoordinateReferenceSystem('EPSG:4326')
-        self.layer.setCrs(crs)
-        self.group.addLayer(self.layer)
+        self.uri.setDataSource(schema, self.table, geom_column)
+        
+
 
     class FileChangeHandler(FileSystemEventHandler):
         def __init__(self, file_handler):
