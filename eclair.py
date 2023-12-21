@@ -24,9 +24,9 @@
 
 from PyQt5.QtWidgets import QApplication, QAction, QWidget, QDockWidget, QTableWidget, QTableWidgetItem
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox
-from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup, QTabWidget, QMainWindow #, QLineEdit
+from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup, QTabWidget, QMainWindow, QLineEdit
 from PyQt5.QtCore import QUrl
-from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase
+from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
 from PyQt5.QtCore import Qt
 from qgis.utils import iface
 from qgis.core import QgsVectorLayer, QgsProject, QgsDataSourceUri, QgsCoordinateReferenceSystem
@@ -36,6 +36,7 @@ import os
 import sys
 import subprocess
 import site
+import math
 import ast
 from pathlib import Path
 
@@ -128,6 +129,10 @@ class EclairDock(QDockWidget):
         layout_db.addWidget(btn_action_new_database)
         btn_action_new_database.clicked.connect(self.create_new_database_dialog)
 
+        btn_action_edit_db_settings = QPushButton("Edit database settings (SRID, timezone, extent, codesets)", self.tab_db)
+        layout_db.addWidget(btn_action_edit_db_settings)
+        btn_action_edit_db_settings.clicked.connect(self.edit_db_settings)
+
         # Import
         layout_import = QVBoxLayout()
         layout_import.setAlignment(Qt.AlignTop)
@@ -182,8 +187,8 @@ class EclairDock(QDockWidget):
         btn_action_aggregate.clicked.connect(self.aggregate_emissions_dialog)
 
         btn_action_raster = QPushButton(" Calculate raster of emissions ", self.tab_calculate)
-        btn_action_raster.setFont(italic_font)
         layout_calculate.addWidget(btn_action_raster)
+        btn_action_raster.clicked.connect(self.rasterize_emissions_dialog)
 
         # Visualize emissions
         layout_visualize = QVBoxLayout()
@@ -232,6 +237,10 @@ class EclairDock(QDockWidget):
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")    
                 message_box('Import error',f"Error: {error}")
+
+    def edit_db_settings(self):
+        # TODO, create command in etk.tools.utils that fixes this
+        pass
     
     def import_pointsources(self):
         self.dry_run = False
@@ -309,6 +318,27 @@ class EclairDock(QDockWidget):
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 message_box('Import error',f"Error: {error}")
+    
+    def rasterize_emissions_dialog(self):
+        from etk.tools.utils import CalledProcessError, run_rasterize_emissions
+        outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files")
+        if (outputpath == ''):
+            # user cancelled
+            message_box('Rasterize error','No directory chosen, raster files not created.')
+        else:
+            try:
+                rasterDialog = RasterizeDialog(self)
+                result = rasterDialog.exec_()  # Show the dialog as a modal dialog
+                if result != QDialog.Accepted:
+                    # user cancelled
+                    message_box('Rasterize error',"No extent, srid and resolution defined, rasterization cancelled.")
+                (stdout, stderr) = run_rasterize_emissions(outputpath, nx=rasterDialog.nx, ny=rasterDialog.ny, extent=rasterDialog.extent, srid=rasterDialog.raster_srid)
+                load_canvas = rasterDialog.load_to_canvas
+                # TODO check if files are created, if not issue warning that sources may be outside of extent
+                message_box('Rasterize emissions',"Successfully rasterized emissions.")
+            except CalledProcessError as e:
+                error = e.stderr.decode("utf-8")
+                message_box('Rasterize error',f"Error: {error}")
 
     def setup_watcher(self):
         # Set up the watchdog observer
@@ -400,8 +430,10 @@ class CheckboxDialog(QDialog):
         layout = QVBoxLayout()
         if self.dry_run:
             label = QLabel("Choose sheets to validate:")
+            self.setWindowTitle("Validate import file")
         else:
             label = QLabel("Choose sheets to import:")
+            self.setWindowTitle("Import data")
         layout.addWidget(label)
 
         # Create checkboxes for each element in the list
@@ -426,6 +458,94 @@ class CheckboxDialog(QDialog):
         # Store the state of the checkboxes
         self.sheet_names = [label for label in self.box_labels if self.checkboxes[label].isChecked()]
         # close the checkbox dialog
+        self.accept()
+
+class RasterizeDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.initUI()
+
+    def initUI(self):
+        # Create a layout for the dialog
+        self.setWindowTitle("Define rasterize settings")
+        layout = QVBoxLayout()
+        label = QLabel("Define srid, extent and raster resolution.")
+        layout.addWidget(label)
+
+        # Add QLineEdit for user to input a number
+        srid_label = QLabel("Enter a coordinate system (EPSG, 4-5 integers):")
+        layout.addWidget(srid_label)
+        self.srid_input = QLineEdit(self)
+        # text inside box self.srid_input.setPlaceholderText("SRID")
+        self.srid_input.setInputMask("99999")  # Max 5 integers
+        self.srid_input.setMaximumWidth(150)
+        layout.addWidget(self.srid_input)
+
+        # Add QLineEdit for user to input a number
+        # TODO would be nice to allow 'current canvas extent', or 'smallest extent to cover all sources'? 
+        extent_label = QLabel("Enter x and y coordinates for lower left (x1, y1) and upper right (x2, y2) corners of output extent:")
+        layout.addWidget(extent_label)
+        # Horizontal box for extent
+        extent_layout = QHBoxLayout()
+        self.extent_input = {}
+        self.extent_labels = ["x1:", "y1:", "x2:" ,"y2:"]
+        for label_text in self.extent_labels:
+            label = QLabel(label_text)
+            extent_layout.addWidget(label)
+            line_edit = QLineEdit(self)
+            line_edit.setValidator(QDoubleValidator())   # Set input mask for floats
+            extent_layout.addWidget(line_edit)
+            self.extent_input[label_text] = line_edit
+        layout.addLayout(extent_layout)
+
+
+        resolution_label = QLabel("Enter the desired resolution of the output extent, in x- and y-direction in meters:")
+        layout.addWidget(resolution_label)
+        # Horizontal box for resolution
+        resolution_layout = QHBoxLayout()
+        self.resolution_input = {}
+        self.resolution_labels = ["resolution x-direction [m]", "resolution y-direction [m]"]
+        for label_text in self.resolution_labels:
+            label = QLabel(label_text)
+            resolution_layout.addWidget(label)
+            line_edit = QLineEdit(self)
+            line_edit.setValidator(QDoubleValidator())   # Set input mask for floats
+            resolution_layout.addWidget(line_edit)
+            self.resolution_input[label_text] = line_edit
+        layout.addLayout(resolution_layout)
+
+        # Create checkbox
+        self.checkbox = QCheckBox("Load rasters to canvas after creation.")
+        self.checkbox.setChecked(True)  # Set initial state
+        layout.addWidget(self.checkbox)
+
+        # Set the layout for the dialog
+        self.setLayout(layout)
+
+        btn_action_run_rasterizer = QPushButton("Create rasters")
+        layout.addWidget(btn_action_run_rasterizer)
+        btn_action_run_rasterizer.clicked.connect(self.run_rasterizer)
+
+    def run_rasterizer(self):
+        self.raster_srid = int(self.srid_input.text())
+        if self.raster_srid < 1024 or self.raster_srid > 32767:
+            message_box("Rasterize error", "EPSG codes defining coordinate systems should be between 1024 and 32767.")
+            return
+        self.extent = [float(self.extent_input[label].text()) for label in self.extent_labels]
+        if self.extent[2] <= self.extent[0] or self.extent[3] <= self.extent[1]:
+            message_box("Rasterize error", "Unvalid extent, x2 should be larger than x1 and y2 larger than y1.")
+            return
+        resolution = [float(self.resolution_input[label].text()) for label in self.resolution_labels]
+        if resolution[0] <= 0 or resolution[1] <= 0:
+            message_box("Rasterize error", "Unvalid resolution, should be a number larger than 0.")
+            return
+        self.nx = math.ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
+        self.ny = math.ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
+        self.resolution = [self.resolution_input[label] for label in self.resolution_labels]
+        # convert extent to format for etk --rasterize command "x1,y1,x2,y2"
+        self.extent = str(self.extent[0])+","+str(self.extent[1])+","+str(self.extent[2])+","+str(self.extent[3])
+        # Store the state of the checkbox
+        self.load_to_canvas = self.checkbox.isChecked()
         self.accept()
 
 
