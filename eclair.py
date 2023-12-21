@@ -29,7 +29,7 @@ from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
 from PyQt5.QtCore import Qt
 from qgis.utils import iface
-from qgis.core import QgsVectorLayer, QgsProject, QgsDataSourceUri, QgsCoordinateReferenceSystem
+from qgis.core import QgsVectorLayer, QgsProject, QgsDataSourceUri, QgsCoordinateReferenceSystem,  QgsRasterLayer,  QgsProviderRegistry,  QgsCoordinateTransform
 import time
 
 import os
@@ -326,16 +326,39 @@ class EclairDock(QDockWidget):
             # user cancelled
             message_box('Rasterize error','No directory chosen, raster files not created.')
         else:
+            # Get a list of files in the directory
+            files_in_directory = os.listdir(outputpath)
+            # Filter the list to include only NetCDF files
+            netcdf_files = [file for file in files_in_directory if file.endswith(".nc")]
+            if netcdf_files:
+                message_box("Rasterize","NetCDF files already exist in provided output directory.\n" 
+                + "New rasters will be named after the substances in the emission inventory "
+                + "(for example PM10.nc). Files cannot be overwritten, so if such files already exist, "
+                + "create a new output directory.")
+                outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files, where no emissions rasters exist yet.")
             try:
                 rasterDialog = RasterizeDialog(self)
                 result = rasterDialog.exec_()  # Show the dialog as a modal dialog
                 if result != QDialog.Accepted:
                     # user cancelled
                     message_box('Rasterize error',"No extent, srid and resolution defined, rasterization cancelled.")
-                (stdout, stderr) = run_rasterize_emissions(outputpath, nx=rasterDialog.nx, ny=rasterDialog.ny, extent=rasterDialog.extent, srid=rasterDialog.raster_srid)
+                    return
                 load_canvas = rasterDialog.load_to_canvas
+                if load_canvas:
+                    time_threshold = time.time() 
+                (stdout, stderr) = run_rasterize_emissions(outputpath, nx=rasterDialog.nx, ny=rasterDialog.ny, extent=rasterDialog.extent, srid=rasterDialog.raster_srid)
                 # TODO check if files are created, if not issue warning that sources may be outside of extent
                 message_box('Rasterize emissions',"Successfully rasterized emissions.")
+                if load_canvas:
+                    # Get a list of files in the directory
+                    files_in_directory = os.listdir(outputpath)
+                    # Filter the list to include only files modified after the time threshold
+                    modified_rasters = [file for file in files_in_directory 
+                    if (os.path.getmtime(os.path.join(outputpath, file)) > time_threshold)
+                    and file.endswith(".nc")]
+                    # Check if there are any modified files
+                    if modified_rasters:
+                        load_rasters_to_canvas(outputpath,modified_rasters)
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 message_box('Rasterize error',f"Error: {error}")
@@ -346,6 +369,7 @@ class EclairDock(QDockWidget):
         self.observer = Observer()
         self.observer.schedule(self.event_handler, path='.', recursive=False)
         self.observer.start()
+
 
     def load_data(self):
         # Get the path to the SQLite database file
@@ -469,7 +493,9 @@ class RasterizeDialog(QDialog):
         # Create a layout for the dialog
         self.setWindowTitle("Define rasterize settings")
         layout = QVBoxLayout()
-        label = QLabel("Define srid, extent and raster resolution.")
+        label = QLabel("Define srid, extent and resolution of output raster."
+        +" Current canvas extent and srid are pre-filled but can be adapted.\n"
+        +"Raster extent and resolution have to be provided in meters, not degrees.")
         layout.addWidget(label)
 
         # Add QLineEdit for user to input a number
@@ -479,6 +505,14 @@ class RasterizeDialog(QDialog):
         # text inside box self.srid_input.setPlaceholderText("SRID")
         self.srid_input.setInputMask("99999")  # Max 5 integers
         self.srid_input.setMaximumWidth(150)
+        # Initialize with current canvas CRS
+        canvas_crs = iface.mapCanvas().mapSettings().destinationCrs()
+        canvas_epsg = int(canvas_crs.authid().split(':')[-1])
+        default_epsg = 3857
+        if canvas_epsg != 4326:
+            self.srid_input.setText(str(canvas_epsg))
+        else:
+            self.srid_input.setText(str(default_epsg))
         layout.addWidget(self.srid_input)
 
         # Add QLineEdit for user to input a number
@@ -489,11 +523,23 @@ class RasterizeDialog(QDialog):
         extent_layout = QHBoxLayout()
         self.extent_input = {}
         self.extent_labels = ["x1:", "y1:", "x2:" ,"y2:"]
+        current_extent = iface.mapCanvas().extent()
+        if canvas_epsg == 4326:
+            # convert from degrees to default_epsg
+            target_crs = QgsCoordinateReferenceSystem(default_epsg)
+            # Create a coordinate transform object
+            transform = QgsCoordinateTransform(canvas_crs, target_crs, QgsProject.instance())
+            # Transform the extent to the target CRS
+            current_extent = transform.transform(current_extent)
+
+        current_corners = {"x1:":round(current_extent.xMinimum()),"y1:":round(current_extent.yMinimum()), "x2:" :round(current_extent.xMaximum()),"y2:":round(current_extent.yMaximum())}
+
         for label_text in self.extent_labels:
             label = QLabel(label_text)
             extent_layout.addWidget(label)
             line_edit = QLineEdit(self)
             line_edit.setValidator(QDoubleValidator())   # Set input mask for floats
+            line_edit.setText(str(current_corners[label_text]))
             extent_layout.addWidget(line_edit)
             self.extent_input[label_text] = line_edit
         layout.addLayout(extent_layout)
@@ -510,6 +556,7 @@ class RasterizeDialog(QDialog):
             resolution_layout.addWidget(label)
             line_edit = QLineEdit(self)
             line_edit.setValidator(QDoubleValidator())   # Set input mask for floats
+            line_edit.setText(str(1000)) # initialize to 1km res
             resolution_layout.addWidget(line_edit)
             self.resolution_input[label_text] = line_edit
         layout.addLayout(resolution_layout)
@@ -521,6 +568,8 @@ class RasterizeDialog(QDialog):
 
         # Set the layout for the dialog
         self.setLayout(layout)
+
+        # TODO let unit be user defined?
 
         btn_action_run_rasterizer = QPushButton("Create rasters")
         layout.addWidget(btn_action_run_rasterizer)
@@ -602,3 +651,11 @@ class TableDialog(QDialog):
         # Set the layout for the dialog
         self.setLayout(layout)
 
+def load_rasters_to_canvas(directory_path, raster_files):
+    for raster_file in raster_files:
+        # Construct the full path to the raster file
+        full_path = os.path.join(directory_path, raster_file)
+        # Create a raster layer
+        raster_layer = QgsRasterLayer(full_path, raster_file, "gdal")
+        # Add the raster layer to the project
+        QgsProject.instance().addMapLayer(raster_layer)
