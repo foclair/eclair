@@ -39,6 +39,7 @@ import site
 import math
 import ast
 from pathlib import Path
+import datetime
 
 
 ETK_BINPATH = os.path.expanduser("~/.local/bin")
@@ -251,7 +252,7 @@ class EclairDock(QDockWidget):
         self.import_pointsourceactivities_dialog()
 
     def import_pointsourceactivities_dialog(self):
-        file_path, _ = QFileDialog.getOpenFileName(None, "Open pointsourceactivities file", "", "Spreadsheet files (*.xlsx)")
+        file_path, _ = QFileDialog.getOpenFileName(None, "Open spreadsheet with point- and/or areasource data file", "", "Spreadsheet files (*.xlsx)")
         if file_path: #if file_path not empty string (user did not click cancel)
             from openpyxl import load_workbook
             workbook = load_workbook(filename=file_path, data_only=True)
@@ -265,10 +266,10 @@ class EclairDock(QDockWidget):
                 sheets = checkboxDialog.sheet_names
             else:
                 if self.dry_run:
-                    message_box('Validation progress','Dialog closed, validation cancelled. Click Validate sheets button instead if validation is desired.')
+                    message_box('Validation progress','Dialog closed, validation cancelled. Restart data validation and click Validate sheets button instead if validation is desired.')
                     return
                 else:
-                    message_box('Import progress','Dialog closed, data import cancelled. Click Import sheets button instead if data import is desired.')
+                    message_box('Import progress','Dialog closed, data import cancelled. Restart data import and click Import sheets button instead if data import is desired.')
                     return
                 sheets = SHEET_NAMES
             
@@ -276,10 +277,15 @@ class EclairDock(QDockWidget):
             try:
                 (stdout, stderr) = run_import(file_path, str(sheets), dry_run=self.dry_run)
                 if self.dry_run:
-                    tableDialog = TableDialog(self,'Validation status','Validated file with successfully ',stdout.decode("utf-8"))
+                    len_errors = len(stdout.decode("utf-8"))
+                    # would be neat to give number of errors, but can somehow not split by '\' to get number of lines so skip for now
+                    if len_errors > 0:
+                        tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n Errors found, correct spreadsheet using error information given below the table before importing data.",stdout.decode("utf-8"))
+                    else:
+                        tableDialog = TableDialog(self,'Validation status','Validated file successfully. ',stdout.decode("utf-8"))
                     tableDialog.exec_() 
                 else:
-                    tableDialog = TableDialog(self,'Import status','Imported data successfully ',stdout.decode("utf-8"))
+                    tableDialog = TableDialog(self,'Import status','Imported data successfully. ',stdout.decode("utf-8"))
                     tableDialog.exec_()  
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
@@ -348,7 +354,15 @@ class EclairDock(QDockWidget):
                 load_canvas = rasterDialog.load_to_canvas
                 if load_canvas:
                     time_threshold = time.time() 
-                (stdout, stderr) = run_rasterize_emissions(outputpath, nx=rasterDialog.nx, ny=rasterDialog.ny, extent=rasterDialog.extent, srid=rasterDialog.raster_srid)
+                (stdout, stderr) = run_rasterize_emissions(
+                    outputpath, 
+                    nx=rasterDialog.nx, 
+                    ny=rasterDialog.ny, 
+                    extent=rasterDialog.extent, 
+                    srid=rasterDialog.raster_srid,
+                    begin=rasterDialog.date[0],
+                    end=rasterDialog.date[1]
+                )
                 # TODO check if files are created, if not issue warning that sources may be outside of extent
                 message_box('Rasterize emissions',"Successfully rasterized emissions.")
                 if load_canvas:
@@ -363,7 +377,10 @@ class EclairDock(QDockWidget):
                         load_rasters_to_canvas(outputpath,modified_rasters)
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
-                message_box('Rasterize error',f"Error: {error}")
+                if "negative dimensions are not allowed" in error:
+                    message_box('Rasterize error',"Could not rasterize emissions, check if any sources exist within the specified output extent.")
+                else:
+                    message_box('Rasterize error',f"Error: {error}")
 
     def setup_watcher(self):
         # Set up the watchdog observer
@@ -496,8 +513,8 @@ class RasterizeDialog(QDialog):
         self.setWindowTitle("Define rasterize settings")
         layout = QVBoxLayout()
         label = QLabel("Define srid, extent and resolution of output raster."
-        +" Current canvas extent and srid are pre-filled but can be adapted.\n"
-        +"Raster extent and resolution have to be provided in meters, not degrees.")
+        +" Current (rounded) canvas extent and srid are pre-filled but can be adapted.\n"
+        +"Raster extent and resolution have to be provided in meters, not degrees (a raster with EPSG 4326 is not possible).")
         layout.addWidget(label)
 
         # Add QLineEdit for user to input a number
@@ -534,7 +551,10 @@ class RasterizeDialog(QDialog):
             # Transform the extent to the target CRS
             current_extent = transform.transform(current_extent)
 
-        current_corners = {"x1:":round(current_extent.xMinimum()),"y1:":round(current_extent.yMinimum()), "x2:" :round(current_extent.xMaximum()),"y2:":round(current_extent.yMaximum())}
+        current_corners = {"x1:":round(current_extent.xMinimum()/1000)*1000,
+            "y1:":round(current_extent.yMinimum()/1000)*1000, 
+            "x2:":round(current_extent.xMaximum()/1000)*1000,
+            "y2:":round(current_extent.yMaximum()/1000)*1000}
 
         for label_text in self.extent_labels:
             label = QLabel(label_text)
@@ -563,6 +583,20 @@ class RasterizeDialog(QDialog):
             self.resolution_input[label_text] = line_edit
         layout.addLayout(resolution_layout)
 
+        # Horizontal box for date
+        date_label = QLabel("If one raster per hour is desired, enter begin and end date for rasters (optional).")
+        layout.addWidget(date_label)
+        date_layout = QHBoxLayout()
+        self.date_input = {}
+        self.date_labels = ["begin [yyyy-mm-dd]", "end [yyyy-mm-dd]"]
+        for label_text in self.date_labels:
+            label = QLabel(label_text)
+            date_layout.addWidget(label)
+            line_edit = QLineEdit(self) 
+            date_layout.addWidget(line_edit)
+            self.date_input[label_text] = line_edit
+        layout.addLayout(date_layout)
+
         # Create checkbox
         self.checkbox = QCheckBox("Load rasters to canvas after creation.")
         self.checkbox.setChecked(True)  # Set initial state
@@ -589,6 +623,28 @@ class RasterizeDialog(QDialog):
         resolution = [float(self.resolution_input[label].text()) for label in self.resolution_labels]
         if resolution[0] <= 0 or resolution[1] <= 0:
             message_box("Rasterize error", "Unvalid resolution, should be a number larger than 0.")
+            return        
+        self.date = [self.date_input[label].text() for label in self.date_labels]
+        if self.date[0] != '':
+            try:
+                begin = datetime.datetime.strptime(self.date[0], "%Y-%m-%d")
+            except ValueError:
+                message_box("Rasterize error", "Incorrect begin date. For example, 1 february 2022 has the format: 2022-02-01")
+                return
+            if self.date[1] != '':
+                try:
+                    end = datetime.datetime.strptime(self.date[1], "%Y-%m-%d")
+                except ValueError:
+                    message_box("Rasterize error", "Incorrect end date. For example, 1 february 2022 has the format: 2022-02-01")
+                    return
+                if begin > end:
+                    message_box("Rasterize error", "End date has to be after begin date.")
+                    return
+            else:
+                message_box("Rasterize error", "If begin date is specified, end date has to be specified too.")
+                return
+        elif self.date[1] != '':
+            message_box("Rasterize error", "If end date is specified, begin date has to be specified too.")
             return
         self.nx = math.ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
         self.ny = math.ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
