@@ -265,19 +265,21 @@ class EclairDock(QDockWidget):
                 sheets = checkboxDialog.sheet_names
             else:
                 if self.dry_run:
-                    message_box('Validation progress','validating all valid sheets '+str(valid_sheets))
+                    message_box('Validation progress','Dialog closed, validation cancelled. Click Validate sheets button instead if validation is desired.')
+                    return
                 else:
-                    message_box('Importing progress','importing all valid sheets '+str(valid_sheets))
+                    message_box('Import progress','Dialog closed, data import cancelled. Click Import sheets button instead if data import is desired.')
+                    return
                 sheets = SHEET_NAMES
             
             from etk.tools.utils import CalledProcessError, run_import
             try:
                 (stdout, stderr) = run_import(file_path, str(sheets), dry_run=self.dry_run)
                 if self.dry_run:
-                    tableDialog = TableDialog(self,'Validation status','Validated file with pointsourceactivities successfully ',stdout.decode("utf-8"))
+                    tableDialog = TableDialog(self,'Validation status','Validated file with successfully ',stdout.decode("utf-8"))
                     tableDialog.exec_() 
                 else:
-                    tableDialog = TableDialog(self,'Import status','Imported pointsourceactivities successfully ',stdout.decode("utf-8"))
+                    tableDialog = TableDialog(self,'Import status','Imported data successfully ',stdout.decode("utf-8"))
                     tableDialog.exec_()  
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
