@@ -277,10 +277,10 @@ class EclairDock(QDockWidget):
             try:
                 (stdout, stderr) = run_import(file_path, str(sheets), dry_run=self.dry_run)
                 if self.dry_run:
-                    len_errors = len(stdout.decode("utf-8"))
-                    # would be neat to give number of errors, but can somehow not split by '\' to get number of lines so skip for now
+                    (table_dict, return_message) = ast.literal_eval(stdout.decode("utf-8"))
+                    len_errors = len(return_message.split("\n"))-1
                     if len_errors > 0:
-                        tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n Errors found, correct spreadsheet using error information given below the table before importing data.",stdout.decode("utf-8"))
+                        tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n Found {len_errors} errors, correct spreadsheet using error information given below the table before importing data.",stdout.decode("utf-8"))
                     else:
                         tableDialog = TableDialog(self,'Validation status','Validated file successfully. ',stdout.decode("utf-8"))
                     tableDialog.exec_() 
@@ -585,6 +585,8 @@ class RasterizeDialog(QDialog):
 
         # Horizontal box for date
         date_label = QLabel("If one raster per hour is desired, enter begin and end date for rasters (optional).")
+        # TODO etk now always assumes timezone UTC, is that desired? may be difficult to communicate different timezone
+        # could give option; local balkan timezone or utc?
         layout.addWidget(date_label)
         date_layout = QHBoxLayout()
         self.date_input = {}
