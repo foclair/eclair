@@ -179,18 +179,20 @@ class EclairDock(QDockWidget):
         layout_calculate = QVBoxLayout()
         layout_calculate.setAlignment(Qt.AlignTop)
         self.tab_calculate.setLayout(layout_calculate)
-        label = QLabel("Functions for calculating previously imported data.", self.tab_calculate)
+        label = QLabel("Create a CSV file with aggregated emissions per sector.", self.tab_calculate)
         layout_calculate.addWidget(label)
 
         # btn_action_create_table = QPushButton(" Create table all pointsources and areasources, combining direct emissions and activities ", self.tab_calculate)
         # layout_calculate.addWidget(btn_action_create_table)
         # btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
 
-        btn_action_aggregate = QPushButton(" Aggregate emissions per sector ", self.tab_calculate)
+        btn_action_aggregate = QPushButton(" Aggregate emissions", self.tab_calculate)
         layout_calculate.addWidget(btn_action_aggregate)
         btn_action_aggregate.clicked.connect(self.aggregate_emissions_dialog)
 
-        btn_action_raster = QPushButton(" Calculate raster of emissions ", self.tab_calculate)
+        label = QLabel("Create NetCDF files with rasterized emissions for each substance in database. ", self.tab_calculate)
+        layout_calculate.addWidget(label)
+        btn_action_raster = QPushButton(" Calculate rasters of emissions ", self.tab_calculate)
         layout_calculate.addWidget(btn_action_raster)
         btn_action_raster.clicked.connect(self.rasterize_emissions_dialog)
 
@@ -199,14 +201,21 @@ class EclairDock(QDockWidget):
         layout_visualize.setAlignment(Qt.AlignTop)
         self.tab_visualize.setLayout(layout_visualize)
 
-        label = QLabel("Functions for visualizing emissions in database.", self.tab_visualize)
+        label = QLabel("To edit geometry of points or polygons, layers have to be loaded interactively."
+        , self.tab_visualize)
         layout_visualize.addWidget(label)
-        btn_action_visualize_point = QPushButton(" Visualize pointsources ", self.tab_visualize)
+        btn_action_visualize_point = QPushButton(" Visualize pointsources interactively", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_point)
         btn_action_visualize_point.clicked.connect(self.load_pointsource_canvas)
-        btn_action_visualize_area = QPushButton(" Visualize areasources ", self.tab_visualize)
+        btn_action_visualize_area = QPushButton(" Visualize areasources interactively", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_area)
         btn_action_visualize_area.clicked.connect(self.load_areasource_canvas)
+        label = QLabel("Sources cannot be loaded interactively together with their emissions.\n "
+        "Each time the inventory is updated, these layers have to be re-loaded.", self.tab_visualize)
+        layout_visualize.addWidget(label)
+        btn_action_visualize_join = QPushButton(" Visualize all current sources with emissions, not interactively", self.tab_visualize)
+        layout_visualize.addWidget(btn_action_visualize_join)
+        btn_action_visualize_join.clicked.connect(self.load_joined_sources_canvas)
 
     def update_db_label(self):
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
@@ -396,15 +405,19 @@ class EclairDock(QDockWidget):
         self.observer.schedule(self.event_handler, path='.', recursive=False)
         self.observer.start()
 
+    def load_joined_sources_canvas(self):
+        for self.source_type in ['point', 'area']:
+            self.load_join()
+
     def load_pointsource_canvas(self):
         self.source_type = 'point'
-        self.load_data()
+        self.load_interactive()
 
     def load_areasource_canvas(self):
         self.source_type = 'area'
-        self.load_data()
+        self.load_interactive()
 
-    def load_data(self):
+    def load_join(self):
         # create/update emission table to load joined layers
         self.create_emission_table_dialog()
         # Get the path to the SQLite database file
@@ -413,20 +426,20 @@ class EclairDock(QDockWidget):
             message_box('Warning','Cannot load layer, database not chosen yet.')
             return 
         db_name = os.path.basename(self.db_path).split('.')[0]
-        
+        timestamp = datetime.datetime.now().strftime("%m-%d-%Y_%H:%M")
         if self.source_type == 'point':
             table = 'edb_pointsource'
             join_table = 'pointsource_emissions'
-            display_name = db_name + '-PointSource'
+            display_name = db_name + '-PointSource' + timestamp
         elif self.source_type == 'area':
             table = 'edb_areasource'
             join_table = 'areasource_emissions'
-            display_name = db_name + '-AreaSource'
+            display_name = db_name + '-AreaSource' + timestamp
         else:
             message_box('Warning', f"Cannot load layer, sourcetype {source_type} unknown.")
 
         # TODO this joined layer does not update automatically when tables are changed.
-        # should use the setup_watcher()
+        # should use the setup_watcher() ?
 
         # get the parameters for join by doing join through processing toolbox,
         # and using the lower button 'Advanced' > 'Copy as Python Command'
@@ -442,8 +455,34 @@ class EclairDock(QDockWidget):
         self.layer = processing.run('qgis:joinattributestable',parameters)['OUTPUT']
         self.layer.setName(display_name)
         QgsProject.instance().addMapLayer(self.layer)
-        
 
+    def load_interactive(self):
+        # Get the path to the SQLite database file
+        self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+        if self.db_path == "Database not set yet.":
+            message_box('Warning','Cannot load layer, database not chosen yet.')
+            return 
+        db_name = os.path.basename(self.db_path).split('.')[0]
+        # Connect to the database
+        uri = QgsDataSourceUri()
+        uri.setDatabase(self.db_path)
+        schema = ''
+        if self.source_type =='point':
+            table = 'edb_pointsource'
+            display_name = db_name + '-PointSource'
+        elif self.source_type == 'area':
+            table = 'edb_areasource'
+            display_name = db_name + '-AreaSource'
+        else:
+            message_box('Warning',f"Cannot load layer, sourcetype {source_type} unknown.")
+        geom_column = 'geom'
+        uri.setDataSource(schema, table, geom_column)
+        self.layer = QgsVectorLayer(uri.uri(), display_name, 'spatialite')
+        crs = QgsCoordinateReferenceSystem('EPSG:4326')
+        self.layer.setCrs(crs)
+        QgsProject.instance().addMapLayer(self.layer)
+
+        
     class FileChangeHandler(FileSystemEventHandler):
         def __init__(self, file_handler):
             self.file_handler = file_handler
