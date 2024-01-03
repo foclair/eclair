@@ -387,10 +387,7 @@ class EclairDock(QDockWidget):
                         load_rasters_to_canvas(outputpath,modified_rasters)
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
-                if "negative dimensions are not allowed" in error:
-                    message_box('Rasterize error',"Could not rasterize emissions, check if any sources exist within the specified output extent.")
-                else:
-                    message_box('Rasterize error',f"Error: {error}")
+                message_box('Rasterize error',f"Error: {error}")
 
     def setup_watcher(self):
         # Set up the watchdog observer
@@ -428,6 +425,11 @@ class EclairDock(QDockWidget):
         else:
             message_box('Warning', f"Cannot load layer, sourcetype {source_type} unknown.")
 
+        # TODO this joined layer does not update automatically when tables are changed.
+        # should use the setup_watcher()
+
+        # get the parameters for join by doing join through processing toolbox,
+        # and using the lower button 'Advanced' > 'Copy as Python Command'
         parameters = { 'DISCARD_NONMATCHING' : False, 
         'FIELD' : 'id', # id in table for join
         'FIELDS_TO_COPY' : [], 
@@ -667,9 +669,9 @@ class RasterizeDialog(QDialog):
             return
         self.nx = math.ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
         self.ny = math.ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
-        self.resolution = [self.resolution_input[label] for label in self.resolution_labels]
         # convert extent to format for etk --rasterize command "x1,y1,x2,y2"
-        self.extent = str(self.extent[0])+","+str(self.extent[1])+","+str(self.extent[2])+","+str(self.extent[3])
+        self.extent = str(self.extent[0])+","+str(self.extent[1])+","+str(self.extent[0]+self.nx*resolution[0])+","+str(self.extent[1]+self.ny*resolution[1])
+        message_box("info",self.extent)
         # Store the state of the checkbox
         self.load_to_canvas = self.checkbox.isChecked()
         self.accept()
