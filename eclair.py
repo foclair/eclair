@@ -29,7 +29,7 @@ from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
 from PyQt5.QtCore import Qt
 from qgis.utils import iface
-from qgis.core import QgsVectorLayer, QgsProject, QgsDataSourceUri, QgsCoordinateReferenceSystem,  QgsRasterLayer,  QgsProviderRegistry,  QgsCoordinateTransform
+from qgis.core import QgsVectorLayer, QgsProject, QgsDataSourceUri, QgsCoordinateReferenceSystem,  QgsRasterLayer,  QgsProviderRegistry,  QgsCoordinateTransform, QgsVectorLayerJoinInfo
 import time
 
 import os
@@ -40,6 +40,8 @@ import math
 import ast
 from pathlib import Path
 import datetime
+
+import processing
 
 
 ETK_BINPATH = os.path.expanduser("~/.local/bin")
@@ -406,31 +408,39 @@ class EclairDock(QDockWidget):
         self.load_data()
 
     def load_data(self):
+        # create/update emission table to load joined layers
+        self.create_emission_table_dialog()
         # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
             return 
         db_name = os.path.basename(self.db_path).split('.')[0]
-        # Connect to the database
-        uri = QgsDataSourceUri()
-        uri.setDatabase(self.db_path)
-        schema = ''
-        if self.source_type =='point':
+        
+        if self.source_type == 'point':
             table = 'edb_pointsource'
+            join_table = 'pointsource_emissions'
             display_name = db_name + '-PointSource'
         elif self.source_type == 'area':
             table = 'edb_areasource'
+            join_table = 'areasource_emissions'
             display_name = db_name + '-AreaSource'
         else:
-            message_box('Warning',f"Cannot load layer, sourcetype {source_type} unknown.")
-        geom_column = 'geom'
-        uri.setDataSource(schema, table, geom_column)
-        self.layer = QgsVectorLayer(uri.uri(), display_name, 'spatialite')
-        crs = QgsCoordinateReferenceSystem('EPSG:4326')
-        self.layer.setCrs(crs)
+            message_box('Warning', f"Cannot load layer, sourcetype {source_type} unknown.")
+
+        parameters = { 'DISCARD_NONMATCHING' : False, 
+        'FIELD' : 'id', # id in table for join
+        'FIELDS_TO_COPY' : [], 
+        'FIELD_2' : 'source_id', # id in join_table for join
+        'INPUT' : f"spatialite://dbname=\'{self.db_path}\' table={table} (geom)", 
+        'INPUT_2' : f"spatialite://dbname=\'{self.db_path}\' table={join_table}", 
+        'METHOD' : 1, 
+        'OUTPUT' : 'TEMPORARY_OUTPUT',
+        'PREFIX' : '' }
+        self.layer = processing.run('qgis:joinattributestable',parameters)['OUTPUT']
+        self.layer.setName(display_name)
         QgsProject.instance().addMapLayer(self.layer)
-        # message_box("Info",f"Data loaded from {self.db_path}")
+        
 
     class FileChangeHandler(FileSystemEventHandler):
         def __init__(self, file_handler):
