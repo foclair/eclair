@@ -131,6 +131,7 @@ class EclairDock(QDockWidget):
         btn_action_new_database.clicked.connect(self.create_new_database_dialog)
 
         btn_action_edit_db_settings = QPushButton("Edit database settings (SRID, timezone, extent, codesets)", self.tab_db)
+        btn_action_edit_db_settings.setFont(italic_font)
         layout_db.addWidget(btn_action_edit_db_settings)
         btn_action_edit_db_settings.clicked.connect(self.edit_db_settings)
 
@@ -179,9 +180,9 @@ class EclairDock(QDockWidget):
         label = QLabel("Functions for calculating previously imported data.", self.tab_calculate)
         layout_calculate.addWidget(label)
 
-        btn_action_create_table = QPushButton(" Create table all pointsources and areasources, combining direct emissions and activities ", self.tab_calculate)
-        layout_calculate.addWidget(btn_action_create_table)
-        btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
+        # btn_action_create_table = QPushButton(" Create table all pointsources and areasources, combining direct emissions and activities ", self.tab_calculate)
+        # layout_calculate.addWidget(btn_action_create_table)
+        # btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
 
         btn_action_aggregate = QPushButton(" Aggregate emissions per sector ", self.tab_calculate)
         layout_calculate.addWidget(btn_action_aggregate)
@@ -304,13 +305,12 @@ class EclairDock(QDockWidget):
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         try:
             (stdout, stderr) = run_update_emission_tables(db_path)
-            message_box('Created emission table',"Successfully created emission table")
         except CalledProcessError as e:
             error = e.stderr.decode("utf-8")
-            message_box('Import error',f"Error: {error}")
+            message_box('Eclair error',f"Error: {error}")
 
     def aggregate_emissions_dialog(self):
-        #TODO catch exception if table not created yet, or create table on the fly in that case?
+        self.create_emission_table_dialog()
         from etk.tools.utils import CalledProcessError, run_aggregate_emissions
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.csv)")
         if (filename == '') or (filename.split('.')[-1] !='csv'):
