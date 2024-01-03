@@ -280,7 +280,8 @@ class EclairDock(QDockWidget):
                     (table_dict, return_message) = ast.literal_eval(stdout.decode("utf-8"))
                     len_errors = len(return_message.split("\n"))-1
                     if len_errors > 0:
-                        tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n Found {len_errors} errors, correct spreadsheet using error information given below the table before importing data.",stdout.decode("utf-8"))
+                        tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n "
+                        +"Found {len_errors} errors, correct spreadsheet using error information given below the table before importing data.",stdout.decode("utf-8"))
                     else:
                         tableDialog = TableDialog(self,'Validation status','Validated file successfully. ',stdout.decode("utf-8"))
                     tableDialog.exec_() 
@@ -648,6 +649,8 @@ class RasterizeDialog(QDialog):
         elif self.date[1] != '':
             message_box("Rasterize error", "If end date is specified, begin date has to be specified too.")
             return
+        else:
+            self.date = [None, None]
         self.nx = math.ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
         self.ny = math.ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
         self.resolution = [self.resolution_input[label] for label in self.resolution_labels]
