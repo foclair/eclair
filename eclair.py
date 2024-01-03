@@ -195,17 +195,15 @@ class EclairDock(QDockWidget):
         layout_visualize = QVBoxLayout()
         layout_visualize.setAlignment(Qt.AlignTop)
         self.tab_visualize.setLayout(layout_visualize)
-        label = QLabel("Functions for visualizing previously imported data.", self.tab_visualize)
-        layout_visualize.addWidget(label)
 
-        btn_action_visualize_point = QPushButton(" Load layers to canvas ", self.tab_visualize)
+        label = QLabel("Functions for visualizing emissions in database.", self.tab_visualize)
+        layout_visualize.addWidget(label)
+        btn_action_visualize_point = QPushButton(" Visualize pointsources ", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_point)
-        btn_action_visualize_point.clicked.connect(self.load_data)
-        # btn_action_visualize_area = QPushButton(" Visualize areasources ", self.tab_visualize)
-        # layout_visualize.addWidget(btn_action_visualize_area)
-        # btn_action_visualize_area.clicked.connect(self.load_areasource_canvas)
-        # Set the tab widget as the central widget
-        # self.setCentralWidget(self.tab_widget)
+        btn_action_visualize_point.clicked.connect(self.load_pointsource_canvas)
+        btn_action_visualize_area = QPushButton(" Visualize areasources ", self.tab_visualize)
+        layout_visualize.addWidget(btn_action_visualize_area)
+        btn_action_visualize_area.clicked.connect(self.load_areasource_canvas)
 
     def update_db_label(self):
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
@@ -399,6 +397,13 @@ class EclairDock(QDockWidget):
         self.observer.schedule(self.event_handler, path='.', recursive=False)
         self.observer.start()
 
+    def load_pointsource_canvas(self):
+        self.source_type = 'point'
+        self.load_data()
+
+    def load_areasource_canvas(self):
+        self.source_type = 'area'
+        self.load_data()
 
     def load_data(self):
         # Get the path to the SQLite database file
@@ -406,34 +411,26 @@ class EclairDock(QDockWidget):
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
             return 
-        self.load_all_sources()
-        message_box('Progress',f"Data loaded from {self.db_path}")
-    
-    def load_all_sources(self):
-        self.tables = ['edb_pointsource','edb_areasource']
-        self.db_name = os.path.basename(self.db_path).split('.')[0]
-        # Create a group layer
-        self.group = QgsProject.instance().layerTreeRoot().addGroup(self.db_name)
-        self.display_names = {'edb_pointsource':'PointSource','edb_areasource':'AreaSource'} 
-        self.table = 'edb_pointsource'
-        self.define_uri()
-        self.pointlayer = QgsVectorLayer(self.uri.uri(), self.display_name, 'spatialite')   
-        self.group.addLayer(self.pointlayer)
-        self.table = 'edb_areasource'
-        self.define_uri()
-        self.arealayer = QgsVectorLayer(self.uri.uri(), self.display_name, 'spatialite')   
-        self.group.addLayer(self.arealayer)
-    
-    def define_uri(self):
+        db_name = os.path.basename(self.db_path).split('.')[0]
         # Connect to the database
-        self.display_name = self.display_names[self.table]
-        self.uri = QgsDataSourceUri()
-        self.uri.setDatabase(self.db_path)
+        uri = QgsDataSourceUri()
+        uri.setDatabase(self.db_path)
         schema = ''
+        if self.source_type =='point':
+            table = 'edb_pointsource'
+            display_name = db_name + '-PointSource'
+        elif self.source_type == 'area':
+            table = 'edb_areasource'
+            display_name = db_name + '-AreaSource'
+        else:
+            message_box('Warning',f"Cannot load layer, sourcetype {source_type} unknown.")
         geom_column = 'geom'
-        self.uri.setDataSource(schema, self.table, geom_column)
-        
-
+        uri.setDataSource(schema, table, geom_column)
+        self.layer = QgsVectorLayer(uri.uri(), display_name, 'spatialite')
+        crs = QgsCoordinateReferenceSystem('EPSG:4326')
+        self.layer.setCrs(crs)
+        QgsProject.instance().addMapLayer(self.layer)
+        # message_box("Info",f"Data loaded from {self.db_path}")
 
     class FileChangeHandler(FileSystemEventHandler):
         def __init__(self, file_handler):
