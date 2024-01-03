@@ -355,15 +355,24 @@ class EclairDock(QDockWidget):
                 load_canvas = rasterDialog.load_to_canvas
                 if load_canvas:
                     time_threshold = time.time() 
-                (stdout, stderr) = run_rasterize_emissions(
-                    outputpath, 
-                    nx=rasterDialog.nx, 
-                    ny=rasterDialog.ny, 
-                    extent=rasterDialog.extent, 
-                    srid=rasterDialog.raster_srid,
-                    begin=rasterDialog.date[0],
-                    end=rasterDialog.date[1]
-                )
+                if rasterDialog.date[0] != '':
+                    (stdout, stderr) = run_rasterize_emissions(
+                        outputpath, 
+                        nx=rasterDialog.nx, 
+                        ny=rasterDialog.ny, 
+                        extent=rasterDialog.extent, 
+                        srid=rasterDialog.raster_srid,
+                        begin=rasterDialog.date[0],
+                        end=rasterDialog.date[1]
+                    )
+                else: 
+                    (stdout, stderr) = run_rasterize_emissions(
+                        outputpath, 
+                        nx=rasterDialog.nx, 
+                        ny=rasterDialog.ny, 
+                        extent=rasterDialog.extent, 
+                        srid=rasterDialog.raster_srid
+                    )
                 # TODO check if files are created, if not issue warning that sources may be outside of extent
                 message_box('Rasterize emissions',"Successfully rasterized emissions.")
                 if load_canvas:
@@ -649,8 +658,6 @@ class RasterizeDialog(QDialog):
         elif self.date[1] != '':
             message_box("Rasterize error", "If end date is specified, begin date has to be specified too.")
             return
-        else:
-            self.date = [None, None]
         self.nx = math.ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
         self.ny = math.ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
         self.resolution = [self.resolution_input[label] for label in self.resolution_labels]
