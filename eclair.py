@@ -23,8 +23,10 @@
 
 
 from PyQt5.QtWidgets import QApplication, QAction, QWidget, QDockWidget, QTableWidget, QTableWidgetItem
-from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox, QComboBox
 from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup, QTabWidget, QMainWindow, QLineEdit
+
+
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
 from PyQt5.QtCore import Qt
@@ -42,6 +44,8 @@ from pathlib import Path
 import datetime
 
 import processing
+
+
 
 
 ETK_BINPATH = os.path.expanduser("~/.local/bin")
@@ -144,13 +148,13 @@ class EclairDock(QDockWidget):
         label = QLabel("Import data to your database (*.xlsx):", self.tab_import)
         layout_import.addWidget(label)
 
-        btn_action_import_pointsourceactivities = QPushButton("Import data from spreadsheet", self.tab_import)
-        layout_import.addWidget(btn_action_import_pointsourceactivities)
-        btn_action_import_pointsourceactivities.clicked.connect(self.import_pointsources)
+        btn_action_import_sources = QPushButton("Import data from spreadsheet", self.tab_import)
+        layout_import.addWidget(btn_action_import_sources)
+        btn_action_import_sources.clicked.connect(self.import_sources)
 
-        btn_action_validate_pointsourceactivities = QPushButton("Validate spreadsheet without importing", self.tab_import)
-        layout_import.addWidget(btn_action_validate_pointsourceactivities)
-        btn_action_validate_pointsourceactivities.clicked.connect(self.validate_pointsources)
+        btn_action_validate_sources = QPushButton("Validate spreadsheet without importing", self.tab_import)
+        layout_import.addWidget(btn_action_validate_sources)
+        btn_action_validate_sources.clicked.connect(self.validate_sources)
 
         # Edit
         layout_edit = QVBoxLayout()
@@ -169,8 +173,10 @@ class EclairDock(QDockWidget):
         label = QLabel("Functions for exporting previously imported data.", self.tab_export)
         layout_export.addWidget(label)
         btn_action_export_all = QPushButton(" Export all imported data ", self.tab_export)
-        btn_action_export_all.setFont(italic_font)
         layout_export.addWidget(btn_action_export_all)
+        btn_action_export_all.clicked.connect(self.export_dialog)
+
+
         btn_action_export = QPushButton(" Export only pointsources, areasources or road sources ", self.tab_export)
         btn_action_export.setFont(italic_font)
         layout_export.addWidget(btn_action_export)
@@ -253,15 +259,15 @@ class EclairDock(QDockWidget):
         # TODO, create command in etk.tools.utils that fixes this
         pass
     
-    def import_pointsources(self):
+    def import_sources(self):
         self.dry_run = False
-        self.import_pointsourceactivities_dialog()
+        self.import_sources_dialog()
 
-    def validate_pointsources(self):
+    def validate_sources(self):
         self.dry_run = True
-        self.import_pointsourceactivities_dialog()
+        self.import_sources_dialog()
 
-    def import_pointsourceactivities_dialog(self):
+    def import_sources_dialog(self):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open spreadsheet with point- and/or areasource data file", "", "Spreadsheet files (*.xlsx)")
         if file_path: #if file_path not empty string (user did not click cancel)
             from openpyxl import load_workbook
@@ -310,6 +316,22 @@ class EclairDock(QDockWidget):
             # user cancelled
             message_box('Import error','No file chosen, no data imported.')
 
+
+    def export_dialog(self):
+        from etk.tools.utils import CalledProcessError, run_export
+        filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for exported emissions", "", "(*.xlsx)")
+        if (filename == '') or (filename.split('.')[-1] !='xlsx'):
+            # user cancelled
+            message_box('Warning','No *.xlsx file chosen, aggregated table not created.')
+        else:
+            try:
+                (stdout, stderr) = run_export(filename)
+                message_box('Export emissions',"Successfully exported emissions.")
+            except CalledProcessError as e:
+                error = e.stderr.decode("utf-8")
+                message_box('Export error',f"Error: {error}")
+    
+
     def create_emission_table_dialog(self):
         #TODO catch exception if database does not have any emissions imported yet
         from etk.tools.utils import CalledProcessError, run_update_emission_tables
@@ -335,7 +357,7 @@ class EclairDock(QDockWidget):
                 message_box('Aggregate emissions',"Successfully aggregated emissions.")
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
-                message_box('Import error',f"Error: {error}")
+                message_box('Aggregation error',f"Error: {error}")
     
     def rasterize_emissions_dialog(self):
         from etk.tools.utils import CalledProcessError, run_rasterize_emissions
