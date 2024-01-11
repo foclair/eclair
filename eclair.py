@@ -297,7 +297,7 @@ class EclairDock(QDockWidget):
                     len_errors = len(return_message.split("\n"))-1
                     if len_errors > 0:
                         tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n "
-                        +"Found {len_errors} errors, correct spreadsheet using error information given below the table before importing data.",stdout.decode("utf-8"))
+                        +f"Found {len_errors} errors, correct spreadsheet using error information given below the table before importing data.",stdout.decode("utf-8"))
                     else:
                         tableDialog = TableDialog(self,'Validation status','Validated file successfully. ',stdout.decode("utf-8"))
                     tableDialog.exec_() 
@@ -351,9 +351,15 @@ class EclairDock(QDockWidget):
             message_box('Warning','No *.csv file chosen, aggregated table not created.')
         else:
             try:
-                #TODO give user choice which codeset to aggregate from;
-                #  how to know which exist?
-                (stdout, stderr) = run_aggregate_emissions(filename,codeset='code_set1')
+                self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+                # Load codesets table
+                layer = QgsVectorLayer(f"{self.db_path}|layername=codesets", "codesets", 'ogr')
+                codesets = []
+                for codeset in layer.getFeatures():
+                    codesets.append(codeset["slug"])
+                message_box('Aggregate emissions',f"Choose slug from {codesets}")
+                #TODO take first codeset by default, but should give user choice which to aggregate for
+                (stdout, stderr) = run_aggregate_emissions(filename,codeset=codesets[0])
                 message_box('Aggregate emissions',"Successfully aggregated emissions.")
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
