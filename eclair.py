@@ -297,12 +297,17 @@ class EclairDock(QDockWidget):
                     len_errors = len(return_message.split("\n"))-1
                     if len_errors > 0:
                         tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n "
-                        +f"Found {len_errors} errors, correct spreadsheet using error information given below the table before importing data.",stdout.decode("utf-8"))
+                        +f"Found {len_errors} errors, correct spreadsheet using error information given below before importing data. \n"
+                        +"No changes to database yet, but number of features to be created or updated once errors are corrected are summarized in table.",
+                        stdout.decode("utf-8"))
                     else:
-                        tableDialog = TableDialog(self,'Validation status','Validated file successfully. ',stdout.decode("utf-8"))
+                        tableDialog = TableDialog(self,'Validation status','Validated file successfully. \n'
+                        + "No changes to database yet, but number of features to be created or updated if file would be imported are summarized in table.",
+                        stdout.decode("utf-8"))
                     tableDialog.exec_() 
                 else:
-                    tableDialog = TableDialog(self,'Import status','Imported data successfully. ',stdout.decode("utf-8"))
+                    tableDialog = TableDialog(self,'Import status','Imported data successfully. \n'
+                    + ' Number of features created or updated summarized in table.',stdout.decode("utf-8"))
                     tableDialog.exec_()  
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
@@ -757,7 +762,6 @@ class TableDialog(QDialog):
         # convert stdout to tuple 
         stdout = ast.literal_eval(self.stdout)
         (table_dict, return_message) = stdout
-
         # TODO: do not know whether timevar is updated or created, 
         # skipping from progress tabel for now
         if 'timevar' in table_dict:
@@ -767,6 +771,8 @@ class TableDialog(QDialog):
 
         layout = QVBoxLayout()
         label = QLabel(self.text)
+        layout.addWidget(label)
+        label = QLabel(return_message)
         layout.addWidget(label)
 
         tableWidget = QTableWidget(self)
@@ -779,7 +785,7 @@ class TableDialog(QDialog):
             item = QTableWidgetItem(str(table_dict[key]['updated']))
             tableWidget.setItem(row, 1, item)
 
-        # Set headers for the table, TO DO adapt for validation
+        # Set headers for the table
         if self.plugin.dry_run:
             tableWidget.setHorizontalHeaderLabels(['to be created', 'to be updated'])
             tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
@@ -789,13 +795,20 @@ class TableDialog(QDialog):
 
         # Resize the columns to fit the content
         tableWidget.resizeColumnsToContents()
+        tableWidget.resizeRowsToContents()
+        tableWidget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # tableWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        margins = layout.contentsMargins()
+        tablewidth = (margins.left() + margins.right() + tableWidget.frameWidth() * 2 +
+        tableWidget.verticalHeader().length() + tableWidget.horizontalHeader().length() + 10)
+        tableWidget.setFixedWidth(tablewidth)
+        tableWidget.setFixedHeight(margins.top() + margins.bottom() +
+        tableWidget.verticalHeader().length()  + tableWidget.horizontalHeader().width())
         layout.addWidget(tableWidget)
 
-        label = QLabel(return_message)
-        layout.addWidget(label)
-
-        # Set the layout for the dialog
         self.setLayout(layout)
+        self.adjustSize()
+
 
 def load_rasters_to_canvas(directory_path, raster_files):
     for raster_file in raster_files:
