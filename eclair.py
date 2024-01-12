@@ -47,10 +47,10 @@ import processing
 
 
 
-
-ETK_BINPATH = os.path.expanduser("~/.local/bin")
-os.environ["PATH"] += f":{ETK_BINPATH}"
-sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
+if os.name != "nt":
+    ETK_BINPATH = os.path.expanduser("~/.local/bin")
+    os.environ["PATH"] += f":{ETK_BINPATH}"
+    sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 
 
 from watchdog.observers import Observer
@@ -239,7 +239,7 @@ class EclairDock(QDockWidget):
 
     def create_new_database_dialog(self):
         db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.sqlite)")
-        if (db_path == '') or (db_path.split('.')[-1] !='sqlite'):
+        if (db_path == ''): 
             # user cancelled
             message_box('Warning','No *.sqlite file chosen, database not created.')
         else:
@@ -320,9 +320,9 @@ class EclairDock(QDockWidget):
     def export_dialog(self):
         from etk.tools.utils import CalledProcessError, run_export
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for exported emissions", "", "(*.xlsx)")
-        if (filename == '') or (filename.split('.')[-1] !='xlsx'):
+        if (filename == ''):
             # user cancelled
-            message_box('Warning','No *.xlsx file chosen, aggregated table not created.')
+            message_box('Warning','No *.xlsx file chosen, emissions not exported.')
         else:
             try:
                 (stdout, stderr) = run_export(filename)
@@ -346,7 +346,7 @@ class EclairDock(QDockWidget):
         self.create_emission_table_dialog()
         from etk.tools.utils import CalledProcessError, run_aggregate_emissions
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.csv)")
-        if (filename == '') or (filename.split('.')[-1] !='csv'):
+        if (filename == ''):
             # user cancelled
             message_box('Warning','No *.csv file chosen, aggregated table not created.')
         else:
