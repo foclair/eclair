@@ -156,6 +156,18 @@ class EclairDock(QDockWidget):
         layout_import.addWidget(btn_action_validate_sources)
         btn_action_validate_sources.clicked.connect(self.validate_sources)
 
+        btn_action_import_eea = QPushButton("Import EEA database emision factors from spreadsheet", self.tab_import)
+        layout_import.addWidget(btn_action_import_eea)
+        btn_action_import_eea.clicked.connect(self.import_eea)
+
+        btn_action_import_residential_heating = QPushButton("Import residential heating data from spreadsheet", self.tab_import)
+        layout_import.addWidget(btn_action_import_residential_heating)
+        btn_action_import_residential_heating.clicked.connect(self.import_residential_heating)
+
+        btn_action_validate_residential_heating = QPushButton("Validate residential heating spreadsheet without importing", self.tab_import)
+        layout_import.addWidget(btn_action_validate_residential_heating)
+        btn_action_validate_residential_heating.clicked.connect(self.validate_residential_heating)
+
         # Edit
         layout_edit = QVBoxLayout()
         layout_edit.setAlignment(Qt.AlignTop)
@@ -292,6 +304,72 @@ class EclairDock(QDockWidget):
             from etk.tools.utils import CalledProcessError, run_import
             try:
                 (stdout, stderr) = run_import(file_path, str(sheets), dry_run=self.dry_run)
+                if self.dry_run:
+                    (table_dict, return_message) = ast.literal_eval(stdout.decode("utf-8"))
+                    len_errors = len(return_message.split("\n"))-1
+                    if len_errors > 0:
+                        tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n "
+                        +f"Found {len_errors} errors, correct spreadsheet using error information given below before importing data. \n"
+                        +"No changes to database yet, but number of features to be created or updated once errors are corrected are summarized in table.",
+                        stdout.decode("utf-8"))
+                    else:
+                        tableDialog = TableDialog(self,'Validation status','Validated file successfully. \n'
+                        + "No changes to database yet, but number of features to be created or updated if file would be imported are summarized in table.",
+                        stdout.decode("utf-8"))
+                    tableDialog.exec_() 
+                else:
+                    tableDialog = TableDialog(self,'Import status','Imported data successfully. \n'
+                    + ' Number of features created or updated summarized in table.',stdout.decode("utf-8"))
+                    tableDialog.exec_()  
+            except CalledProcessError as e:
+                error = e.stderr.decode("utf-8")
+                if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
+                    message_box('Error',f"Error: a target database is not specified yet,"
+                    +" choose an existing or create a new database first.")
+                else:
+                    import_error = error.split('ImportError:')[-1]
+                    message_box('Import error',f"Error: {import_error}")
+        else:
+            # user cancelled
+            message_box('Import error','No file chosen, no data imported.')
+
+    def import_eea(self):
+        file_path, _ = QFileDialog.getOpenFileName(None, "Open spreadsheet file EEA emission factors", "", "Spreadsheet files (*.xlsx)")
+        if file_path: #if file_path not empty string (user did not click cancel)
+            #TODO do something similar as import_sources, for limiting substances.
+            from etk.tools.utils import CalledProcessError, run_import_eea_emfacs
+            try:
+                (stdout, stderr) = run_import_eea_emfacs(file_path)
+                tableDialog = TableDialog(self,'Import status','Imported data successfully. \n'
+                + ' Number of features created or updated summarized in table.',stdout.decode("utf-8"))
+                tableDialog.exec_() 
+            except CalledProcessError as e:
+                error = e.stderr.decode("utf-8")
+                if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
+                    message_box('Error',f"Error: a target database is not specified yet,"
+                    +" choose an existing or create a new database first.")
+                else:
+                    import_error = error.split('ImportError:')[-1]
+                    message_box('Import error',f"Error: {import_error}")
+        else:
+            # user cancelled
+            message_box('Import error','No file chosen, no data imported.')
+
+    def import_residential_heating(self):
+        self.dry_run = False
+        self.import_residential_heating_dialog()
+
+    def validate_residential_heating(self):
+        self.dry_run = True
+        self.import_residential_heating_dialog()
+
+    def import_residential_heating_dialog(self):
+        file_path, _ = QFileDialog.getOpenFileName(None, "Open spreadsheet data file with point- and/or area energy demand for heating", "", "Spreadsheet files (*.xlsx)")
+        if file_path: #if file_path not empty string (user did not click cancel)
+            #TODO do something similar as import_sources, for limiting substances.
+            from etk.tools.utils import CalledProcessError, run_import_residential_heating
+            try:
+                (stdout, stderr) = run_import_residential_heating(file_path, dry_run=self.dry_run)
                 if self.dry_run:
                     (table_dict, return_message) = ast.literal_eval(stdout.decode("utf-8"))
                     len_errors = len(return_message.split("\n"))-1
