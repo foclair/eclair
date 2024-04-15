@@ -145,7 +145,7 @@ class EclairDock(QDockWidget):
         layout_import = QVBoxLayout()
         layout_import.setAlignment(Qt.AlignTop)
         self.tab_import.setLayout(layout_import)
-        label = QLabel("Import data to your database (*.xlsx):", self.tab_import)
+        label = QLabel("Import point- and areasources to your database (*.xlsx):", self.tab_import)
         layout_import.addWidget(label)
 
         btn_action_import_sources = QPushButton("Import data from spreadsheet", self.tab_import)
@@ -155,6 +155,15 @@ class EclairDock(QDockWidget):
         btn_action_validate_sources = QPushButton("Validate spreadsheet without importing", self.tab_import)
         layout_import.addWidget(btn_action_validate_sources)
         btn_action_validate_sources.clicked.connect(self.validate_sources)
+
+        label = QLabel("Import and validate gridsources (not implemented yet)", self.tab_import)
+        layout_import.addWidget(label)
+        btn_action_import_grid = QPushButton("Import gridsources using spreadsheet ", self.tab_import)
+        btn_action_import_grid.setFont(italic_font)
+        layout_import.addWidget(btn_action_import_grid)
+        btn_action_validate_grid = QPushButton("Validate gridsources using spreadsheet ", self.tab_import)
+        btn_action_validate_grid.setFont(italic_font)
+        layout_import.addWidget(btn_action_validate_grid)
 
         # Edit
         layout_edit = QVBoxLayout()
