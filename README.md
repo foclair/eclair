@@ -34,6 +34,12 @@ Somehow, it could be that OSGeo4W does not copy the sql files in etk. Check this
 cd C:\OSGeo4W\apps\Python39\Lib\site-packages\etk\emissions
 dir
 ```
+If there are no sql files, copy them manually
+```
+copy <your_path>\ECLAIR_Beta_16april\etk\emissions\*.sql .
+```
+**TODO** this will be fixed automatically in future release. 
+
 
 Now create a folder in your home directory: **TODO** this should not be necessary, but the automatic creation of the folder does not work in Windows yet.
 ```
@@ -75,7 +81,7 @@ Note that if you want to import activities or activity codes for sources, these 
 Required columns for areasources are: facility_id, facility_name, source_name, geometry and timevar, where the geometry of the polygons is in WKT format (see template). Required columns for pointsources are: facility_id, facility_name, source_name, lat and lon. 
 Optional columns for pointsources are: timevar, chimney_height, outer_diameter (of chimney), inner_diameter, gas_speed, gas_temperature[K], house_width and house_height. All physical parameters should be specified in SI units (m, m/s and K). 
 
-Each source should have a unique combination of source_name and facility_id. The same facility_id cannot be used for different facility names.
+Each source should have a unique combination of source_name and facility_id. The same facility_id cannot be used for different facility names. If you import a source which has a name and facility_id that already exist in the database, this source will not be **duplicated** but its parameters will be **updated**.
 
 Direct emissions for a substance are specified by create a column 'subst:PM10', where PM10 is taken as an example. The implemented substances are: 
     ("As", "As", "Arsenic"),
@@ -130,6 +136,25 @@ Direct emissions for a substance are specified by create a column 'subst:PM10', 
 Indirect emissions, specified by an activity, activity rate and emission factors, are added by a column act:activity_name (see templates for example).
 
 **TODO** timevar should be optional for areasources as well? format list of substances
+
+#### Edit
+**TODO**
+Currently, values can only be edited by loading layers interactively, and then for example moving the point or corners of a polygon using QGIS functionality. Parameter values can also be changed by right clicking on the interactively loaded layer, choose Open Attribute Table, Toggle Editing, and changing a number in the table. 
+
+The currently easiest way to change emissions is to change the input file and import it again. If changes were made to the emissions through the QGIS functionality after emissions were imported, it is possible to first export all emissions (see export window), then change in the exported table, and import the adapted table. 
+
+Removing points or areas is currently not possible. The most straightforward way to do this is to export all emissions, remove the points or polygons that should be removed, and create a **new** database where the new input file is imported. Just importing an input file where some sources are removed to an existing database will **not** remove those sources.
+
+#### Export
+Exports all data currently stored in the database to a file which has the correct format to be imported into an emission inventory.
+
+#### Analyse
+Aggregate (sum) emissions per sector and store as a csv file (**TODO** codeset cannot be chosen by user yet, taking codeset 1 as default).
+
+Calculate raster of emissions and store as netcdf file. See instructions in QGIS window. 
+
+#### Load layers
+Layers can be loaded interactively, to always reflect the current state of the database which Eclair is connected to, or as a 'snapshot' of the state of the database when the 'Visualize all current sources' button is clicked. This latter button will add the date and time of creation of the layers to the layer name. Changes in the 'snapshot' layer will **not** be reflected in the database. However, the benifit of such a snapshot layer is that it will link the static information about sources (chimney_height etc) with both direct and indirect emissions of the sources. This is not (yet?) possible when visualizing layers interactively. Use the 'Identify Features' (often with shortcut ctrl+shift+i) to study the emissions. Note that the identify features tool only works on the layer which is currently selected in the Layers panel.
 
 
 ## Development
