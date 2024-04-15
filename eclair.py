@@ -100,7 +100,7 @@ class EclairDock(QDockWidget):
 
         # To automatically update database changes in visualized layer
         # self.setup_watcher()
-        # watcher not necessary for point and area sources, reloaded from sqlite
+        # watcher not necessary for point and area sources, reloaded from gpkg
         # as soon as view of canvas changes (zoom etc)
         default_font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
         italic_font = default_font
@@ -240,7 +240,7 @@ class EclairDock(QDockWidget):
         self.db_label.setText(f"Eclair is currently connected to database:\n {db_path}")
 
     def load_existing_database_dialog(self):
-        db_path, _ = QFileDialog.getOpenFileName(self.tab_db, "Open SQLite database", "", "Database (*.sqlite)")
+        db_path, _ = QFileDialog.getOpenFileName(self.tab_db, "Open SQLite database", "", "Database (*.gpkg)")
         if db_path == '':
             # user cancelled
             message_box('Warning','No file chosen, database not configured.')
@@ -250,13 +250,13 @@ class EclairDock(QDockWidget):
             message_box('Load database',f"Database succesfully chosen database {db_path}.")
 
     def create_new_database_dialog(self):
-        db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.sqlite)")
-        # TODO if user did not write .sqlite in file name, add it?
+        db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.gpkg)")
+        # TODO if user did not write .gpkg in file name, add it?
         # of could it cause problem if user chooses a name say "db"
-        # and "db" does not exist yet in the directory, but "db.sqlite" does?
+        # and "db" does not exist yet in the directory, but "db.gpkg" does?
         if (db_path == ''): 
             # user cancelled
-            message_box('Warning','No *.sqlite file chosen, database not created.')
+            message_box('Warning','No *.gpkg file chosen, database not created.')
         else:
             from etk.tools.utils import CalledProcessError, create_from_template
             try:
