@@ -38,7 +38,7 @@ import os
 import sys
 import subprocess
 import site
-import math
+from math import ceil, floor
 import ast
 from pathlib import Path
 import datetime
@@ -251,6 +251,9 @@ class EclairDock(QDockWidget):
 
     def create_new_database_dialog(self):
         db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.sqlite)")
+        # TODO if user did not write .sqlite in file name, add it?
+        # of could it cause problem if user chooses a name say "db"
+        # and "db" does not exist yet in the directory, but "db.sqlite" does?
         if (db_path == ''): 
             # user cancelled
             message_box('Warning','No *.sqlite file chosen, database not created.')
@@ -340,9 +343,10 @@ class EclairDock(QDockWidget):
             from etk.tools.utils import CalledProcessError, run_import_eea_emfacs
             try:
                 (stdout, stderr) = run_import_eea_emfacs(file_path)
-                tableDialog = TableDialog(self,'Import status','Imported data successfully. \n'
-                + ' Number of features created or updated summarized in table.',stdout.decode("utf-8"))
-                tableDialog.exec_() 
+                #tableDialog = TableDialog(self,'Import status','Imported data successfully. \n'
+                #+ ' Number of features created or updated summarized in table.',stdout.decode("utf-8"))
+                #tableDialog.exec_() 
+                message_box("Import emfacs","Imported EEA emission factors") #+stdout.decode("utf-8"))
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
@@ -367,9 +371,28 @@ class EclairDock(QDockWidget):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open spreadsheet data file with point- and/or area energy demand for heating", "", "Spreadsheet files (*.xlsx)")
         if file_path: #if file_path not empty string (user did not click cancel)
             #TODO do something similar as import_sources, for limiting substances.
+            #TODO substance AS ignored for now due to bug!
+            valid_substances = ['PM10', 'NMVOC', 'Se', 'NOx', 'CO', 'Pb', 'Cd', 'Ni', 'Cu', 'TSP', 'SOx', 'HCB', 'Cr', 'Hg', 'PCB', 'Zn', 'PM25', 'BC', 'NH3']
+            #TODO change labels from sheets to substances i checkbox dialog
+            checkboxDialog = CheckboxDialog(self,valid_substances, self.dry_run)
+            result = checkboxDialog.exec_()  # Show the dialog as a modal dialog
+            if result == QDialog.Accepted:
+                substances = checkboxDialog.sheet_names
+            else:
+                if self.dry_run:
+                    message_box('Validation progress','Dialog closed, validation cancelled. Restart data validation and click Validate sheets button instead if validation is desired.')
+                    return
+                else:
+                    message_box('Import progress','Dialog closed, data import cancelled. Restart data import and click Import sheets button instead if data import is desired.')
+                    return
+                substances = valid_substances
+
+
+
             from etk.tools.utils import CalledProcessError, run_import_residential_heating
+            
             try:
-                (stdout, stderr) = run_import_residential_heating(file_path, dry_run=self.dry_run)
+                (stdout, stderr) = run_import_residential_heating(file_path, dry_run=self.dry_run, substances=substances)
                 if self.dry_run:
                     (table_dict, return_message) = ast.literal_eval(stdout.decode("utf-8"))
                     len_errors = len(return_message.split("\n"))-1
@@ -440,9 +463,11 @@ class EclairDock(QDockWidget):
                 codesets = []
                 for codeset in layer.getFeatures():
                     codesets.append(codeset["slug"])
-                message_box('Aggregate emissions',f"Choose slug from {codesets}")
+                # codesetDialog = ChooseCodesetDialog(self,codesets)
+                # codesetDialog.exec_()
+                message_box('Aggregate emissions',f"Aggregate emissions for codeset NFR")
                 #TODO take first codeset by default, but should give user choice which to aggregate for
-                (stdout, stderr) = run_aggregate_emissions(filename,codeset=codesets[0])
+                (stdout, stderr) = run_aggregate_emissions(filename,codeset="NFR")
                 message_box('Aggregate emissions',"Successfully aggregated emissions.")
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
@@ -720,10 +745,10 @@ class RasterizeDialog(QDialog):
             # Transform the extent to the target CRS
             current_extent = transform.transform(current_extent)
 
-        current_corners = {"x1:":round(current_extent.xMinimum()/1000)*1000,
-            "y1:":round(current_extent.yMinimum()/1000)*1000, 
-            "x2:":round(current_extent.xMaximum()/1000)*1000,
-            "y2:":round(current_extent.yMaximum()/1000)*1000}
+        current_corners = {"x1:":floor(current_extent.xMinimum()/1000)*1000,
+            "y1:":floor(current_extent.yMinimum()/1000)*1000, 
+            "x2:":ceil(current_extent.xMaximum()/1000)*1000,
+            "y2:":ceil(current_extent.yMaximum()/1000)*1000}
 
         for label_text in self.extent_labels:
             label = QLabel(label_text)
@@ -817,14 +842,42 @@ class RasterizeDialog(QDialog):
         elif self.date[1] != '':
             message_box("Rasterize error", "If end date is specified, begin date has to be specified too.")
             return
-        self.nx = math.ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
-        self.ny = math.ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
+        self.nx = ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
+        self.ny = ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
         # convert extent to format for etk --rasterize command "x1,y1,x2,y2"
         self.extent = str(self.extent[0])+","+str(self.extent[1])+","+str(self.extent[0]+self.nx*resolution[0])+","+str(self.extent[1]+self.ny*resolution[1])
-        message_box("info",self.extent)
+        # message_box("info",self.extent)
         # Store the state of the checkbox
         self.load_to_canvas = self.checkbox.isChecked()
         self.accept()
+
+class ChooseCodesetDialog(QDialog):
+    def __init__(self,plugin, codesets=None):
+        super().__init__()
+        self.codesets = codesets
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle("Emission aggregation")
+        layout = QVBoxLayout()
+        label = QLabel("Choose the codeset for which emissions should be aggregated.")
+        layout.addWidget(label)
+
+        layout_buttons = QHBoxLayout()
+        for self.codeset in self.codesets:
+            btn_action = QPushButton(self.codeset)
+            layout.addWidget(btn_action)
+            btn_action.clicked.connect(self.run_aggregation)
+    
+    def run_aggregation(self):
+        try:
+            (stdout, stderr) = run_aggregate_emissions(filename,codeset=self.codeset)
+            message_box('Aggregate emissions',"Successfully aggregated emissions.")
+        except CalledProcessError as e:
+            error = e.stderr.decode("utf-8")
+            message_box('Aggregation error',f"Error: {error}")
+
+
 
 
 class TableDialog(QDialog):
