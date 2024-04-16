@@ -156,15 +156,6 @@ class EclairDock(QDockWidget):
         layout_import.addWidget(btn_action_validate_sources)
         btn_action_validate_sources.clicked.connect(self.validate_sources)
 
-        label = QLabel("Import and validate gridsources (not implemented yet)", self.tab_import)
-        layout_import.addWidget(label)
-        btn_action_import_grid = QPushButton("Import gridsources using spreadsheet ", self.tab_import)
-        btn_action_import_grid.setFont(italic_font)
-        layout_import.addWidget(btn_action_import_grid)
-        btn_action_validate_grid = QPushButton("Validate gridsources using spreadsheet ", self.tab_import)
-        btn_action_validate_grid.setFont(italic_font)
-        layout_import.addWidget(btn_action_validate_grid)
-
         # Edit
         layout_edit = QVBoxLayout()
         layout_edit.setAlignment(Qt.AlignTop)

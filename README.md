@@ -59,8 +59,8 @@ Eclair can either be installed from zip (easier for user not involved in develop
 Now Eclair is installed, and a button with 'Eclair!' should have appeared in QGIS. Clicking this button should open a panel below the 'layers' panel, on the left of the user interface.
 
 ### Using Eclair
-Eclair has several windows, each of which are described below. 
-For all windows, the functions of buttons that are in *italic* are not yet implemented. 
+Eclair has several sheets, each of which are described below. 
+For all sheets, the functions of buttons that are in *italic* are not yet implemented. 
 Eclair often opens windows to report on the processing status. These windows have to be closed before being able to continue using the QGIS interface.
 
 #### DB Settings
@@ -84,58 +84,54 @@ Optional columns for pointsources are: timevar, chimney_height, outer_diameter (
 Each source should have a unique combination of source_name and facility_id. The same facility_id cannot be used for different facility names. If you import a source which has a name and facility_id that already exist in the database, this source will not be **duplicated** but its parameters will be **updated**.
 
 Direct emissions for a substance are specified by create a column 'subst:PM10', where PM10 is taken as an example. The implemented substances are: 
-    ("As", "As", "Arsenic"),
-    ("BC", "BC", "Black Carbon"),
-    ("BaP", "BaP", "Benzo[a]pyrene"),
-    ("Cd", "Cd", "Cadmium"),
-    ("Cr", "Cr", "Chromium"),
-    ("Cu", "Cu", "Copper"),
-    ("C6H6", "Benzene", "Benzene"),
-    ("CH4", "Methane", "Methane"),
-    ("CO", "CO", "Carbon monoxide"),
-    ("CO2", "CO2", "Carbon dioxide"),
-    (
-        "Dioxin",
-        "Dioxin",
-        "Dioxin",
-    ),
-    ("HC", "Hydrocarbons", "Hydrocarbons"),
-    ("HCB", "HCB", "Hexachlorobenzene"),
-    ("HFC", "HFC", "Hydrofluorocarbons"),
-    ("Hg", "Hg", "Mercury"),
-    ("N2O", "N2O", "Nitrous oxide"),
-    ("NH3", "NH3", "Ammonia"),
-    ("Ni", "Ni", "Nickel"),
-    ("NMHC", "NMHC", "Non-methane hydrocarbons"),
-    ("NMVOC", "NMVOC", "Non-methane volatile organic compound"),
-    ("NOx", "NOx", "Nitrogen oxides (as NO2)"),
-    ("NO2", "NO2", "Nitrogen dioxide"),
-    ("NO", "NO", "Nitrogen monooxide"),
-    ("O3", "Ozone", "Ozone"),
-    ("PAH4", "PAH4", "Sum of 4 polycyclic aromatic hydrocarbons"),
-    ("Pb", "Pb", "Lead"),
-    ("PFC", "PFC", "Perfluorocarbons"),
-    ("PM10", "PM10", "Particulate matter < 10 micrometers in diameter"),
-    ("PM25", "PM2.5", "Particulate matter < 2.5 micrometers in diameter"),
-    ("PM10resusp", "PM10resusp", "Resuspended particles < 10 micrometers in diameter"),
-    (
-        "PM25resusp",
-        "PM2.5resusp",
-        "Resuspended particles < 2.5 micrometers in diameter",
-    ),
-    ("PN", "PN", "Particle Number"),
-    ("Se", "Se", "Selenium"),
-    ("PCB", "PCB", "Polychlorinated biphenyls"),
-    ("SF6", "SF6", "Sulfur Hexafluoride"),
-    ("SO2", "SO2", "Sulphur dioxide"),
-    ("SOx", "SOx", "Sulphur oxides (as SO2)"),
-    ("traffic_work", "traffic work", "Traffic work"),
-    ("TSP", "TSP", "Total Suspended Particles"),
-    ("Zn", "Zn", "Zinc"),
+
+| abbreviation | name substance |
+| :-- | :-- |
+| As | Arsenic |
+| BC | Black Carbon |
+| BaP | Benzo\[a\]pyrene |
+| Cd | Cadmium |
+| Cr | Chromium |
+| Cu | Copper |
+| C6H6 | Benzene |
+| CH4 | Methane |
+| CO | Carbon monoxide |
+| CO2 | Carbon dioxide |
+| Dioxin | Dioxin |
+| HC | Hydrocarbons |
+| HCB | Hexachlorobenzene |
+| HFC | Hydrofluorocarbons |
+| Hg | Mercury |
+| N2O | Nitrous oxide |
+| NH3 | Ammonia |
+| Ni | Nickel |
+| NMHC | Non-methane hydrocarbons |
+| NMVOC | Non-methane volatile organic compound |
+| NOx | Nitrogen oxides as NO2 |
+| NO2 | Nitrogen dioxide |
+| NO | Nitrogen monooxide |
+| O3 | Ozone |
+| PAH4 | Sum of 4 polycyclic aromatic hydrocarbons |
+| Pb | Lead |
+| PFC | Perfluorocarbons |
+| PM10 | Particulate matter < 10 micrometers in diameter |
+| PM25 | Particulate matter < 2.5 micrometers in diameter |
+| PM10resusp | Resuspended particles < 10 micrometers in diameter |
+| PM25resusp | Resuspended particles < 2.5 micrometers in diameter |
+| PN | Particle Number |
+| Se | Selenium |
+| PCB | Polychlorinated biphenyls |
+| SF6 | Sulfur Hexafluoride |
+| SO2 | Sulphur dioxide |
+| SOx | Sulphur oxides as SO2 |
+| TSP | Total Suspended Particles |
+| Zn | Zinc |
+
+
 
 Indirect emissions, specified by an activity, activity rate and emission factors, are added by a column act:activity_name (see templates for example).
 
-**TODO** timevar should be optional for areasources as well? format list of substances
+**TODO** timevar should be optional for areasources as well
 
 #### Edit
 **TODO**
