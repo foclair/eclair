@@ -1,18 +1,7 @@
-# Eclair
+# Eclair - Emission CompiLation for AIR quality
 
-Build on QGIS minimalist plugin.
-In order to use, may have to create your own venv, install all requirements and etk (which is not yet included in requirements.txt).
+*Eclair* is a QGIS plugin, which uses the python module *etk* to structure emission data and store emissions together with geographic information in a database. 
 
-If experience problems with template database, run following in QGIS Python console to find where template database is located:
-
-```
-import os
-DATABASE_DIR = Path(
-    os.path.join(
-        os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "eclair"
-    )
-)
-```
 ### Windows installation
 The OSGeo4W installer helps to install the PROJ, GDAL, and GEOS libraries required by ECLAIR. First, download the  [OSGeo4W installer](https://trac.osgeo.org/osgeo4w/), and run it. Select Express Web-GIS Install and click next. In the ‘Select Packages’ list, ensure that GDAL is selected. If any other packages are enabled by default, they are not required by ECLAIR and may be unchecked safely. After clicking next and accepting the license agreements, the packages will be automatically downloaded and installed, after which you may exit the installer.
 
@@ -63,10 +52,15 @@ Eclair has several sheets, each of which are described below.
 For all sheets, the functions of buttons that are in *italic* are not yet implemented. 
 Eclair often opens windows to report on the processing status. These windows have to be closed before being able to continue using the QGIS interface.
 
+Currently, point- and areasources are implemented in etk, and gridsources are added very soon. 
+Sources can either have direct emissions, where the emission of each substance is known for a source.
+If the amount of emissions is not known, but the activity of the source is known (for example the energy demand for heating), an activity rate and emission factors can be imported to specify emissions.
+
 #### DB Settings
 Here you choose which database to edit. Every time the plugin is started, a database has to be chosen or created.
 When creating a new database, it is now **obligatory** to give a name ending in ".gpkg" (this will likely change in next update).
 If you receive an error message stating "ModuleNotFoundError: No module named 'etk'", make sure that you opened the version of QGIS connected to your OSGeo4W installation (as QGIS could be installed twice, once as stand-alone and once as part of OSGeo4W). The executable of the program connected to OSGeo4W can be found in `OSGeo4W/bin/qgis-ltr-bin`. Always use this version of QGIS when working with Eclair. 
+
 #### Import
 Template files that show what structure import files should have are located in 
 ```
@@ -155,7 +149,19 @@ Layers can be loaded interactively, to always reflect the current state of the d
 
 ## Development
 
-Best through plugin-reloader. Create a symlink to this directory at the location where QGIS finds plugins. For Windows eg
+In order to use, may have to create your own venv, install all requirements and etk (which is not yet included in requirements.txt).
+If experience problems with template database, run following in QGIS Python console to find where template database is located:
+
+```
+import os
+DATABASE_DIR = Path(
+    os.path.join(
+        os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config")), "eclair"
+    )
+)
+```
+
+Development is best done through plugin-reloader. Create a symlink to this directory at the location where QGIS finds plugins. For Windows eg
 ```
 mklink /D C:\Users\eefva\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\minimal-eclair C:\Users\eefva\Projects\minimal-eclair 
 mklink /D C:\OSGeo4W\apps\qgis\plugins\minimal-eclair %UserProfile%\Projects\minimal-eclair
