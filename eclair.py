@@ -53,8 +53,6 @@ if os.name != "nt":
     sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 
 
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
        
 class Eclair(QWidget):
     def __init__(self, iface):
@@ -437,12 +435,7 @@ class EclairDock(QDockWidget):
                 error = e.stderr.decode("utf-8")
                 message_box('Rasterize error',f"Error: {error}")
 
-    def setup_watcher(self):
-        # Set up the watchdog observer
-        self.event_handler = self.FileChangeHandler(self)
-        self.observer = Observer()
-        self.observer.schedule(self.event_handler, path='.', recursive=False)
-        self.observer.start()
+
 
     def load_joined_sources_canvas(self):
         for self.source_type in ['point', 'area']:
@@ -522,28 +515,6 @@ class EclairDock(QDockWidget):
         QgsProject.instance().addMapLayer(self.layer)
 
         
-    class FileChangeHandler(FileSystemEventHandler):
-        def __init__(self, file_handler):
-            self.file_handler = file_handler
-            self.last_modified_times = {}
-        def on_any_event(self, event):
-            if event.is_directory:
-                return
-            elif event.event_type == 'modified' and event.src_path == self.file_handler.db_path:
-                # Check which tables have been modified and reload only those
-                for table in self.file_handler.tables:
-                    table_path = f"{self.file_handler.db_path}.{table}"
-                    last_modified_time = self.last_modified_times.get(table, None)
-                    # Get the current modification time
-                    current_modified_time = QDateTime().currentDateTime().toMSecsSinceEpoch()
-                    if last_modified_time is None or current_modified_time > last_modified_time:
-                        # the new point shows up, but the message box does not, why not?
-                        message_box("NOTE","Reloading {table} due to changes in {event.src_path}")
-                        self.file_handler.table = table
-                        self.file_handler.display_name = self.file_handler.display_names[table]
-                        self.file_handler.load_layer()
-                        self.last_modified_times[table] = current_modified_time
-
 
 def show_help(self):
     """Display application help to the user."""
