@@ -3,9 +3,13 @@
 *Eclair* is a QGIS plugin, which uses the python module *etk* to structure emission data and store emissions together with geographic information in a database. 
 
 ### Windows installation
-The OSGeo4W installer helps to install the PROJ, GDAL, and GEOS libraries required by ECLAIR. First, download the  [OSGeo4W installer](https://trac.osgeo.org/osgeo4w/), and run it. Select Express Web-GIS Install and click next. In the ‘Select Packages’ list, ensure that GDAL is selected. If any other packages are enabled by default, they are not required by ECLAIR and may be unchecked safely. After clicking next and accepting the license agreements, the packages will be automatically downloaded and installed, after which you may exit the installer.
+The OSGeo4W installer helps to install the PROJ, GDAL, and GEOS libraries required by ECLAIR.
 
-Next, open the OSGeo4W shell and run 
+#### OSGeo4W installation instructions 
+First, download the  [OSGeo4W installer](https://trac.osgeo.org/osgeo4w/), and run it. Select Express Web-GIS Install and click next. In the ‘Select Packages’ list, ensure that GDAL is selected. If any other packages are enabled by default, they are not required by ECLAIR and may be unchecked safely. After clicking next and accepting the license agreements, the packages will be automatically downloaded and installed, after which you may exit the installer.
+
+#### Install etk and Eclair
+Once OSGeo4W is installed, open the OSGeo4W shell and run 
 ```
 pip install -i https://test.pypi.org/simple/ rastafari==0.2.2
 ```
@@ -13,19 +17,25 @@ Instructions for installing etk will follow once publicly available. For now, bo
 ```
 /data/proj9/A-konsult/Västra_Balkan_luftmiljö_2022_2270_10.3/06_Underlag/ECLAIR_Beta_16april
 ```
-Copy this directory to a suitable location, and go to etk in the OSGeo4W shell, for example:
+Copy this directory to a suitable location, and use the command `cd` to go to etk in the OSGeo4W shell, for example:
 ```
-cd C:\Users\<your_home>\Desktop\ECLAIR_Beta_16april\etk
+cd C:\Users\<your_home>\Desktop\etk
+```
+The OSGeo4W shell should now state that you are located in the right directory, for example `C:\Users\<your_home>\Desktop\etk>`.
+Install etk by:
+```
 pip install .
 ```
-Somehow, it could be that OSGeo4W does not copy the sql files in etk. Check this as follows (make sure to change to your location of OSGeo4W, if it is not in C:\):
+If etk is successfully installed, the last line of output should state `Successfully installed (....) etk-0.0.1.dev0 (...)`, where other Python packages used by etk are stated both before and after etk.
+
+Somehow, it could be that OSGeo4W does not copy the sql files in etk. Check this by going to the location where you have installed OSGeo4W, if it is not in C:\):
 ```
 cd C:\OSGeo4W\apps\Python39\Lib\site-packages\etk\emissions
 dir
 ```
 If there are no sql files, copy them manually
 ```
-copy <your_path>\ECLAIR_Beta_16april\etk\emissions\*.sql .
+copy <your_path>\ECLAIR_Beta_16april\etk\src\etk\emissions\*.sql .
 ```
 **TODO** this will be fixed automatically in future release. 
 
