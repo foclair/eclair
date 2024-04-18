@@ -403,9 +403,8 @@ class EclairDock(QDockWidget):
                     time_threshold = time.time() 
                 if rasterDialog.date[0] != '':
                     (stdout, stderr) = run_rasterize_emissions(
-                        outputpath, 
-                        nx=rasterDialog.nx, 
-                        ny=rasterDialog.ny, 
+                        outputpath,
+                        rasterDialog.cell_size, 
                         extent=rasterDialog.extent, 
                         srid=rasterDialog.raster_srid,
                         begin=rasterDialog.date[0],
@@ -635,12 +634,13 @@ class RasterizeDialog(QDialog):
         layout.addLayout(extent_layout)
 
 
-        resolution_label = QLabel("Enter the desired resolution of the output extent, in x- and y-direction in meters:")
+        resolution_label = QLabel("Enter the desired resolution of the output extent, in meters:")
         layout.addWidget(resolution_label)
         # Horizontal box for resolution
         resolution_layout = QHBoxLayout()
         self.resolution_input = {}
-        self.resolution_labels = ["resolution x-direction [m]", "resolution y-direction [m]"]
+        self.resolution_label = ["resolution [m]"]
+        # leaving the for-loop in case want to go back to x and y resolution
         for label_text in self.resolution_labels:
             label = QLabel(label_text)
             resolution_layout.addWidget(label)
@@ -691,9 +691,10 @@ class RasterizeDialog(QDialog):
             message_box("Rasterize error", "Unvalid extent, x2 should be larger than x1 and y2 larger than y1.")
             return
         resolution = [float(self.resolution_input[label].text()) for label in self.resolution_labels]
-        if resolution[0] <= 0 or resolution[1] <= 0:
+        if resolution[0] <= 0:
             message_box("Rasterize error", "Unvalid resolution, should be a number larger than 0.")
             return        
+        self.cell_size = resolution[0]
         self.date = [self.date_input[label].text() for label in self.date_labels]
         if self.date[0] != '':
             try:
@@ -716,12 +717,14 @@ class RasterizeDialog(QDialog):
         elif self.date[1] != '':
             message_box("Rasterize error", "If end date is specified, begin date has to be specified too.")
             return
-        self.nx = ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
-        self.ny = ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
+        # below is now organised in etk adjust extent    
+        # self.nx = ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
+        # self.ny = ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
         # convert extent to format for etk --rasterize command "x1,y1,x2,y2"
-        self.extent = str(self.extent[0])+","+str(self.extent[1])+","+str(self.extent[0]+self.nx*resolution[0])+","+str(self.extent[1]+self.ny*resolution[1])
+        # self.extent = str(self.extent[0])+","+str(self.extent[1])+","+str(self.extent[0]+self.nx*resolution[0])+","+str(self.extent[1]+self.ny*resolution[1])
         # message_box("info",self.extent)
         # Store the state of the checkbox
+        
         self.load_to_canvas = self.checkbox.isChecked()
         self.accept()
 
