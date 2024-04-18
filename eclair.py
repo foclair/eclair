@@ -40,6 +40,7 @@ import subprocess
 import site
 from math import ceil, floor
 import ast
+import re
 from pathlib import Path
 import datetime
 
@@ -292,14 +293,12 @@ class EclairDock(QDockWidget):
             
             from etk.tools.utils import CalledProcessError, run_import
             try:
-                (stdout, stderr) = run_import(file_path, str(sheets), dry_run=self.dry_run)
+                (stderr, stdout) = run_import(file_path, sheets, dry_run=self.dry_run)
                 if self.dry_run:
-                    (table_dict, return_message) = ast.literal_eval(stdout.decode("utf-8"))
-                    len_errors = len(return_message.split("\n"))-1
-                    if len_errors > 0:
+                    if "ERROR" in stdout.decode("utf-8"):
+                        # len_errors = len(stdout.decode("utf-8").split("\n"))-2
                         tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n "
-                        +f"Found {len_errors} errors, correct spreadsheet using error information given below before importing data. \n"
-                        +"No changes to database yet, but number of features to be created or updated once errors are corrected are summarized in table.",
+                        +f"Found errors, correct spreadsheet using error information given below before importing data: \n",
                         stdout.decode("utf-8"))
                     else:
                         tableDialog = TableDialog(self,'Validation status','Validated file successfully. \n'
@@ -766,52 +765,60 @@ class TableDialog(QDialog):
         self.initUI()
 
     def initUI(self):
-        # convert stdout to tuple 
-        stdout = ast.literal_eval(self.stdout)
-        (table_dict, return_message) = stdout
-        # TODO: do not know whether timevar is updated or created, 
-        # skipping from progress tabel for now
-        if 'timevar' in table_dict:
-            table_dict.pop('timevar')
-        nr_rows = len(table_dict.keys())
-        self.setWindowTitle(self.title)
 
+
+        self.setWindowTitle(self.title)
         layout = QVBoxLayout()
         label = QLabel(self.text)
         layout.addWidget(label)
-        label = QLabel(return_message)
-        layout.addWidget(label)
 
-        tableWidget = QTableWidget(self)
-        tableWidget.setRowCount(nr_rows)
-        tableWidget.setColumnCount(2)
-
-        for row, key in enumerate(sorted(table_dict.keys())):
-            item = QTableWidgetItem(str(table_dict[key]['created']))
-            tableWidget.setItem(row, 0, item)
-            item = QTableWidgetItem(str(table_dict[key]['updated']))
-            tableWidget.setItem(row, 1, item)
-
-        # Set headers for the table
         if self.plugin.dry_run:
-            tableWidget.setHorizontalHeaderLabels(['to be created', 'to be updated'])
-            tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
+            pattern = r"data to be imported (.+)\n"
         else:
-            tableWidget.setHorizontalHeaderLabels(['created', 'updated'])
-            tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
+            pattern = r"imported data (.+)\n"
 
-        # Resize the columns to fit the content
-        tableWidget.resizeColumnsToContents()
-        tableWidget.resizeRowsToContents()
-        tableWidget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        # tableWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        margins = layout.contentsMargins()
-        tablewidth = (margins.left() + margins.right() + tableWidget.frameWidth() * 2 +
-        tableWidget.verticalHeader().length() + tableWidget.horizontalHeader().length() + 10)
-        tableWidget.setFixedWidth(tablewidth)
-        tableWidget.setFixedHeight(margins.top() + margins.bottom() +
-        tableWidget.verticalHeader().length()  + tableWidget.horizontalHeader().width())
-        layout.addWidget(tableWidget)
+        match = re.search(pattern, str(self.stdout))
+        if match is not None:
+            table_dict = eval(match.group(1))
+
+            # TODO: do not know whether timevar is updated or created, 
+            # skipping from progress tabel for now
+            if 'timevar' in table_dict:
+                table_dict.pop('timevar')
+            nr_rows = len(table_dict.keys())
+            tableWidget = QTableWidget(self)
+            tableWidget.setRowCount(nr_rows)
+            tableWidget.setColumnCount(2)
+
+            for row, key in enumerate(sorted(table_dict.keys())):
+                item = QTableWidgetItem(str(table_dict[key]['created']))
+                tableWidget.setItem(row, 0, item)
+                item = QTableWidgetItem(str(table_dict[key]['updated']))
+                tableWidget.setItem(row, 1, item)
+
+            # Set headers for the table
+            if self.plugin.dry_run:
+                tableWidget.setHorizontalHeaderLabels(['to be created', 'to be updated'])
+                tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
+            else:
+                tableWidget.setHorizontalHeaderLabels(['created', 'updated'])
+                tableWidget.setVerticalHeaderLabels(sorted(table_dict.keys()))
+
+            # Resize the columns to fit the content
+            tableWidget.resizeColumnsToContents()
+            tableWidget.resizeRowsToContents()
+            tableWidget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            # tableWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            margins = layout.contentsMargins()
+            tablewidth = (margins.left() + margins.right() + tableWidget.frameWidth() * 2 +
+            tableWidget.verticalHeader().length() + tableWidget.horizontalHeader().length() + 10)
+            tableWidget.setFixedWidth(tablewidth)
+            tableWidget.setFixedHeight(margins.top() + margins.bottom() +
+            tableWidget.verticalHeader().length()  + tableWidget.horizontalHeader().width())
+            layout.addWidget(tableWidget)
+        else:
+            label = QLabel(self.stdout)
+            layout.addWidget(label)
 
         self.setLayout(layout)
         self.adjustSize()
