@@ -413,8 +413,7 @@ class EclairDock(QDockWidget):
                 else: 
                     (stdout, stderr) = run_rasterize_emissions(
                         outputpath, 
-                        nx=rasterDialog.nx, 
-                        ny=rasterDialog.ny, 
+                        rasterDialog.cell_size, 
                         extent=rasterDialog.extent, 
                         srid=rasterDialog.raster_srid
                     )
@@ -639,7 +638,7 @@ class RasterizeDialog(QDialog):
         # Horizontal box for resolution
         resolution_layout = QHBoxLayout()
         self.resolution_input = {}
-        self.resolution_label = ["resolution [m]"]
+        self.resolution_labels = ["resolution [m]"]
         # leaving the for-loop in case want to go back to x and y resolution
         for label_text in self.resolution_labels:
             label = QLabel(label_text)
