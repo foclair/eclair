@@ -225,6 +225,12 @@ class EclairDock(QDockWidget):
         btn_action_visualize_area = QPushButton(" Visualize areasources interactively", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_area)
         btn_action_visualize_area.clicked.connect(self.load_areasource_canvas)
+        btn_action_visualize_grid = QPushButton(" Visualize gridsources interactively", self.tab_visualize)
+        layout_visualize.addWidget(btn_action_visualize_grid)
+        btn_action_visualize_grid.clicked.connect(self.load_gridsource_canvas)
+        btn_action_visualize_road = QPushButton(" Visualize roadsources interactively", self.tab_visualize)
+        layout_visualize.addWidget(btn_action_visualize_road)
+        btn_action_visualize_road.clicked.connect(self.load_roadsource_canvas)
         label = QLabel("Sources cannot be loaded interactively together with their emissions.\n "
         "Each time the inventory is updated, these layers have to be re-loaded.", self.tab_visualize)
         layout_visualize.addWidget(label)
@@ -445,7 +451,7 @@ class EclairDock(QDockWidget):
 
 
     def load_joined_sources_canvas(self):
-        for self.source_type in ['point', 'area']:
+        for self.source_type in ['point', 'area','road']:
             self.load_join()
 
     def load_pointsource_canvas(self):
@@ -454,6 +460,14 @@ class EclairDock(QDockWidget):
 
     def load_areasource_canvas(self):
         self.source_type = 'area'
+        self.load_interactive()
+
+    def load_gridsource_canvas(self):
+        self.source_type = 'grid'
+        self.load_interactive()
+
+    def load_roadsource_canvas(self):
+        self.source_type = 'road'
         self.load_interactive()
 
     def load_join(self):
@@ -474,6 +488,14 @@ class EclairDock(QDockWidget):
             table = 'edb_areasource'
             join_table = 'areasource_emissions'
             display_name = db_name + '-AreaSource' + timestamp
+        elif self.source_type == 'grid':
+            table = 'edb_gridsource'
+            join_table = 'gridsource_emissions'
+            display_name = db_name + '-GridSource' + timestamp
+        elif self.source_type == 'road':
+            table = 'edb_roadsource'
+            join_table = 'roadsource_emissions'
+            display_name = db_name + '-RoadSource' + timestamp
         else:
             message_box('Warning', f"Cannot load layer, sourcetype {source_type} unknown.")
 
@@ -512,6 +534,13 @@ class EclairDock(QDockWidget):
         elif self.source_type == 'area':
             table = 'edb_areasource'
             display_name = db_name + '-AreaSource'
+        elif self.source_type == 'grid':
+            table = 'edb_gridsource'
+            display_name = db_name + '-GridSource' 
+        elif self.source_type == 'road':
+            table = 'edb_roadsource'
+            join_table = 'roadsource_emissions'
+            display_name = db_name + '-RoadSource'
         else:
             message_box('Warning',f"Cannot load layer, sourcetype {source_type} unknown.")
         geom_column = 'geom'
