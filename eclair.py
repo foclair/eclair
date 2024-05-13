@@ -849,9 +849,13 @@ class TableDialog(QDialog):
             tableWidget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             # tableWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             margins = layout.contentsMargins()
+            max_row_label_width = 0
+            for i in range(tableWidget.verticalHeader().count()):
+                row_label_width = tableWidget.verticalHeader().sectionSize(i)
+                max_row_label_width = max(max_row_label_width, row_label_width)
             tablewidth = (margins.left() + margins.right() + tableWidget.frameWidth() * 2 +
-            tableWidget.verticalHeader().length() + tableWidget.horizontalHeader().length() + 10)
-            tableWidget.setFixedWidth(tablewidth)
+            max_row_label_width + tableWidget.horizontalHeader().length() + 10)
+            tableWidget.setFixedWidth(tablewidth*4)
             tableWidget.setFixedHeight(margins.top() + margins.bottom() +
             tableWidget.verticalHeader().length()  + tableWidget.horizontalHeader().width())
             layout.addWidget(tableWidget)
