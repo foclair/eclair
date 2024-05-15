@@ -137,7 +137,7 @@ class EclairDock(QDockWidget):
         self.update_db_label()
         layout_db.addWidget(self.db_label)
 
-        btn_action_existing_database = QPushButton("Choose existing database to edit", self.tab_db)
+        btn_action_existing_database = QPushButton("Connect to existing database", self.tab_db)
         layout_db.addWidget(btn_action_existing_database)
         btn_action_existing_database.clicked.connect(self.load_existing_database_dialog)
 
@@ -145,7 +145,7 @@ class EclairDock(QDockWidget):
         layout_db.addWidget(btn_action_new_database)
         btn_action_new_database.clicked.connect(self.create_new_database_dialog)
 
-        btn_action_edit_db_settings = QPushButton("Edit database settings (SRID, timezone, extent, codesets)", self.tab_db)
+        btn_action_edit_db_settings = QPushButton("Edit database settings", self.tab_db)
         btn_action_edit_db_settings.setFont(italic_font)
         layout_db.addWidget(btn_action_edit_db_settings)
         btn_action_edit_db_settings.clicked.connect(self.edit_db_settings)
@@ -154,24 +154,24 @@ class EclairDock(QDockWidget):
         layout_import = QVBoxLayout()
         layout_import.setAlignment(Qt.AlignTop)
         self.tab_import.setLayout(layout_import)
-        label = QLabel("Import point- and areasources to your database (*.xlsx):", self.tab_import)
+        label = QLabel("Import data from Excel to your database:", self.tab_import)
         layout_import.addWidget(label)
 
-        btn_action_import_sources = QPushButton("Import data from spreadsheet", self.tab_import)
-        layout_import.addWidget(btn_action_import_sources)
-        btn_action_import_sources.clicked.connect(self.import_sources)
-
-        btn_action_validate_sources = QPushButton("Validate spreadsheet without importing", self.tab_import)
+        btn_action_validate_sources = QPushButton("Validate data (before importing)", self.tab_import)
         layout_import.addWidget(btn_action_validate_sources)
         btn_action_validate_sources.clicked.connect(self.validate_sources)
+
+        btn_action_import_sources = QPushButton("Import data", self.tab_import)
+        layout_import.addWidget(btn_action_import_sources)
+        btn_action_import_sources.clicked.connect(self.import_sources)
 
         # Edit
         layout_edit = QVBoxLayout()
         layout_edit.setAlignment(Qt.AlignTop)
         self.tab_edit.setLayout(layout_edit)
-        label = QLabel("Functions for editing previously imported data.", self.tab_edit)
+        label = QLabel("Edit or remove data.", self.tab_edit)
         layout_edit.addWidget(label)
-        btn_action_edit = QPushButton(" Edit imported data ", self.tab_edit)
+        btn_action_edit = QPushButton(" Edit data", self.tab_edit)
         btn_action_edit.setFont(italic_font)
         layout_edit.addWidget(btn_action_edit)
 
@@ -179,14 +179,14 @@ class EclairDock(QDockWidget):
         layout_export = QVBoxLayout()
         layout_export.setAlignment(Qt.AlignTop)
         self.tab_export.setLayout(layout_export)
-        label = QLabel("Functions for exporting previously imported data.", self.tab_export)
+        label = QLabel("Export database to Excel", self.tab_export)
         layout_export.addWidget(label)
-        btn_action_export_all = QPushButton(" Export all imported data ", self.tab_export)
+        btn_action_export_all = QPushButton(" Export all data", self.tab_export)
         layout_export.addWidget(btn_action_export_all)
         btn_action_export_all.clicked.connect(self.export_dialog)
 
 
-        btn_action_export = QPushButton(" Export only pointsources, areasources or road sources ", self.tab_export)
+        btn_action_export = QPushButton(" Export only pointsources", self.tab_export)
         btn_action_export.setFont(italic_font)
         layout_export.addWidget(btn_action_export)
 
@@ -194,20 +194,20 @@ class EclairDock(QDockWidget):
         layout_calculate = QVBoxLayout()
         layout_calculate.setAlignment(Qt.AlignTop)
         self.tab_calculate.setLayout(layout_calculate)
-        label = QLabel("Create a CSV file with aggregated emissions per sector.", self.tab_calculate)
+        label = QLabel("Create a Excel file with aggregated emissions per sector.", self.tab_calculate)
         layout_calculate.addWidget(label)
 
-        # btn_action_create_table = QPushButton(" Create table all pointsources and areasources, combining direct emissions and activities ", self.tab_calculate)
+        # btn_action_create_table = QPushButton(" Create table all pointsources and areasources, combining direct emissions and activities", self.tab_calculate)
         # layout_calculate.addWidget(btn_action_create_table)
         # btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
 
-        btn_action_aggregate = QPushButton(" Aggregate emissions", self.tab_calculate)
+        btn_action_aggregate = QPushButton("Aggregate emissions", self.tab_calculate)
         layout_calculate.addWidget(btn_action_aggregate)
         btn_action_aggregate.clicked.connect(self.aggregate_emissions_dialog)
 
-        label = QLabel("Create NetCDF files with rasterized emissions for each substance in database. ", self.tab_calculate)
+        label = QLabel("Create NetCDF files with rasterized emissions for all substances.", self.tab_calculate)
         layout_calculate.addWidget(label)
-        btn_action_raster = QPushButton(" Calculate rasters of emissions ", self.tab_calculate)
+        btn_action_raster = QPushButton(" Calculate rasters of emissions", self.tab_calculate)
         layout_calculate.addWidget(btn_action_raster)
         btn_action_raster.clicked.connect(self.rasterize_emissions_dialog)
 
@@ -216,31 +216,29 @@ class EclairDock(QDockWidget):
         layout_visualize.setAlignment(Qt.AlignTop)
         self.tab_visualize.setLayout(layout_visualize)
 
-        label = QLabel("To edit geometry of points or polygons, layers have to be loaded interactively."
+        label = QLabel("Load layers without emissions (dynamic)"
         , self.tab_visualize)
         layout_visualize.addWidget(label)
-        btn_action_visualize_point = QPushButton(" Visualize pointsources interactively", self.tab_visualize)
+        btn_action_visualize_point = QPushButton("Points", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_point)
         btn_action_visualize_point.clicked.connect(self.load_pointsource_canvas)
-        btn_action_visualize_area = QPushButton(" Visualize areasources interactively", self.tab_visualize)
+        btn_action_visualize_area = QPushButton("Areas", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_area)
         btn_action_visualize_area.clicked.connect(self.load_areasource_canvas)
-        btn_action_visualize_grid = QPushButton(" Visualize gridsources interactively", self.tab_visualize)
-        layout_visualize.addWidget(btn_action_visualize_grid)
-        btn_action_visualize_grid.clicked.connect(self.load_gridsource_canvas)
-        btn_action_visualize_road = QPushButton(" Visualize roadsources interactively", self.tab_visualize)
+        btn_action_visualize_road = QPushButton("Roads", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_road)
         btn_action_visualize_road.clicked.connect(self.load_roadsource_canvas)
-        label = QLabel("Sources cannot be loaded interactively together with their emissions.\n "
-        "Each time the inventory is updated, these layers have to be re-loaded.", self.tab_visualize)
+        label = QLabel("Load sources with emissions (static)\n"
+        "Layers have to be re-loaded each time the inventory is updated.", self.tab_visualize)
         layout_visualize.addWidget(label)
-        btn_action_visualize_join = QPushButton(" Visualize all current sources with emissions, not interactively", self.tab_visualize)
+        btn_action_visualize_join = QPushButton("All sources", self.tab_visualize)
         layout_visualize.addWidget(btn_action_visualize_join)
         btn_action_visualize_join.clicked.connect(self.load_joined_sources_canvas)
 
     def update_db_label(self):
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
-        self.db_label.setText(f"Eclair is currently connected to database:\n {db_path}")
+        self.db_label.setText(f"Eclair is currently connected to database:\n {os.path.basename(db_path)}")
+        self.db_label.setToolTip(str(db_path))
 
     def load_existing_database_dialog(self):
         db_path, _ = QFileDialog.getOpenFileName(self.tab_db, "Open SQLite database", "", "Database (*.gpkg)")
@@ -367,10 +365,10 @@ class EclairDock(QDockWidget):
     def aggregate_emissions_dialog(self):
         self.create_emission_table_dialog()
         from etk.tools.utils import CalledProcessError, run_aggregate_emissions
-        filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.csv)")
+        filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.xlsx)")
         if (filename == ''):
             # user cancelled
-            message_box('Warning','No *.csv file chosen, aggregated table not created.')
+            message_box('Warning','No file chosen, aggregated table not created.')
         else:
             try:
                 self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
