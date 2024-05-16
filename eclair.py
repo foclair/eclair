@@ -513,9 +513,39 @@ class EclairDock(QDockWidget):
         'METHOD' : 1, 
         'OUTPUT' : 'TEMPORARY_OUTPUT',
         'PREFIX' : '' }
-        self.layer = processing.run('qgis:joinattributestable',parameters)['OUTPUT']
+        tmp_join = processing.run('qgis:joinattributestable',parameters)['OUTPUT']
+
+        if self.source_type in ["area", "point"]:
+            parameters_codeset_join = {'INPUT':tmp_join, 
+            'FIELD':'activitycode1_id',
+            'INPUT_2':f"spatialite://dbname=\'{self.db_path}\' table=edb_activitycode",
+            'FIELD_2':'id',
+            'FIELDS_TO_COPY':['code','label'],
+            'METHOD':1,
+            'DISCARD_NONMATCHING':False,
+            'PREFIX':'codeset1_',
+            'OUTPUT':'TEMPORARY_OUTPUT'}
+
+            tmp_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
+
+            parameters_codeset_join['PREFIX'] = 'codeset2_'
+            parameters_codeset_join['FIELD'] = 'activitycode2_id'
+            tmp_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
+
+            parameters_codeset_join['PREFIX'] = 'codeset3_'
+            parameters_codeset_join['FIELD'] = 'activitycode3_id'
+            self.layer = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
+        else:
+            self.layer = tmp_join
         self.layer.setName(display_name)
         QgsProject.instance().addMapLayer(self.layer)
+
+
+        processing.run("native:joinattributestable", 
+        {'INPUT':'memory://Point?crs=EPSG:4326&field=id:long(0,0)&field=name:string(0,0)&field=created:datetime(0,0)&field=updated:datetime(0,0)&field=tags:string(0,0)&field=chimney_height:double(0,0)&field=chimney_outer_diameter:double(0,0)&field=chimney_inner_diameter:double(0,0)&field=chimney_gas_speed:double(0,0)&field=chimney_gas_temperature:double(0,0)&field=house_width:long(0,0)&field=house_height:long(0,0)&field=activitycode1_id:long(0,0)&field=activitycode2_id:long(0,0)&field=activitycode3_id:long(0,0)&field=facility_id:long(0,0)&field=timevar_id:long(0,0)&field=source_id:long(0,0)&field=NOx:double(0,0)&field=PM10:double(0,0)&field=SO2:double(0,0)&uid={2e9430f9-1329-4711-9816-f1cf6a321366}',
+        'FIELD':'activitycode1_id',
+        'INPUT_2':'/home/a002469/Demo/Kavadarci-industry.gpkg|layername=edb_activitycode',
+        'FIELD_2':'id','FIELDS_TO_COPY':['code','label'],'METHOD':1,'DISCARD_NONMATCHING':False,'PREFIX':'','OUTPUT':'TEMPORARY_OUTPUT'})
 
     def load_interactive(self):
         # Get the path to the SQLite database file
