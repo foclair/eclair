@@ -32,6 +32,7 @@ from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
 from PyQt5.QtCore import Qt
 from qgis.utils import iface
 from qgis.core import QgsVectorLayer, QgsProject, QgsDataSourceUri, QgsCoordinateReferenceSystem,  QgsRasterLayer,  QgsProviderRegistry,  QgsCoordinateTransform, QgsVectorLayerJoinInfo
+from qgis.gui import QgsProjectionSelectionDialog
 import time
 
 import os
@@ -259,17 +260,18 @@ class EclairDock(QDockWidget):
             # user cancelled
             message_box('Warning','No *.gpkg file chosen, database not created.')
         else:
-            from etk.tools.utils import CalledProcessError, create_from_template
+            from etk.tools.utils import CalledProcessError, create_from_template, set_settings_srid
             try:
-                # TODO should make sure that template database is migrated before
-                # creating new from template!
+                epsg = self.show_srid_dialog()
                 proc = create_from_template(db_path)
                 os.environ["ETK_DATABASE_PATH"] = db_path
+                if epsg is not None:
+                    set_settings_srid(epsg)
                 self.update_db_label()
-                message_box('Created database',f"Successfully created database {db_path}")
+                message_box('Created database',f"Successfully created database {db_path} with coordinate system {epsg}")
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")    
-                message_box('Import error',f"Error: {error}")
+                message_box('Create database error',f"Error: {error}")
 
     def edit_db_settings(self):
         # TODO, create command in etk.tools.utils that fixes this
@@ -547,6 +549,18 @@ class EclairDock(QDockWidget):
         crs = QgsCoordinateReferenceSystem('EPSG:4326')
         self.layer.setCrs(crs)
         QgsProject.instance().addMapLayer(self.layer)
+        
+    def show_srid_dialog(self):
+        crs_dialog = QgsProjectionSelectionDialog()
+        crs_dialog.setWindowTitle("Select default coordinate system for your database")
+        if crs_dialog.exec_():
+            # Get the selected CRS
+            crs = crs_dialog.crs()
+            # Get the EPSG code
+            epsg_code = crs.authid().split(":")[-1]
+            return epsg_code
+        else:
+            return None
 
         
 
