@@ -217,24 +217,36 @@ class EclairDock(QDockWidget):
         layout_visualize.setAlignment(Qt.AlignTop)
         self.tab_visualize.setLayout(layout_visualize)
 
-        label = QLabel("Load layers without emissions (dynamic)"
-        , self.tab_visualize)
+        label = QLabel("Load layers without emissions (dynamic)", self.tab_visualize)
         layout_visualize.addWidget(label)
+
+        dynamic_sources_layout = QHBoxLayout()
         btn_action_visualize_point = QPushButton("Points", self.tab_visualize)
-        layout_visualize.addWidget(btn_action_visualize_point)
+        dynamic_sources_layout.addWidget(btn_action_visualize_point)
         btn_action_visualize_point.clicked.connect(self.load_pointsource_canvas)
         btn_action_visualize_area = QPushButton("Areas", self.tab_visualize)
-        layout_visualize.addWidget(btn_action_visualize_area)
+        dynamic_sources_layout.addWidget(btn_action_visualize_area)
         btn_action_visualize_area.clicked.connect(self.load_areasource_canvas)
         btn_action_visualize_road = QPushButton("Roads", self.tab_visualize)
-        layout_visualize.addWidget(btn_action_visualize_road)
+        dynamic_sources_layout.addWidget(btn_action_visualize_road)
         btn_action_visualize_road.clicked.connect(self.load_roadsource_canvas)
+        layout_visualize.addLayout(dynamic_sources_layout)
+        
         label = QLabel("Load sources with emissions (static)\n"
         "Layers have to be re-loaded each time the inventory is updated.", self.tab_visualize)
         layout_visualize.addWidget(label)
-        btn_action_visualize_join = QPushButton("All sources", self.tab_visualize)
-        layout_visualize.addWidget(btn_action_visualize_join)
-        btn_action_visualize_join.clicked.connect(self.load_joined_sources_canvas)
+        
+        static_sources_layout = QHBoxLayout()
+        btn_action_visualize_join_point = QPushButton("Points", self.tab_visualize)
+        static_sources_layout.addWidget(btn_action_visualize_join_point)
+        btn_action_visualize_join_point.clicked.connect(self.load_joined_pointsource_canvas)
+        btn_action_visualize_join_area = QPushButton("Areas", self.tab_visualize)
+        static_sources_layout.addWidget(btn_action_visualize_join_area)
+        btn_action_visualize_join_area.clicked.connect(self.load_joined_areasource_canvas)
+        btn_action_visualize_join_road = QPushButton("Roads", self.tab_visualize)
+        static_sources_layout.addWidget(btn_action_visualize_join_road)
+        btn_action_visualize_join_road.clicked.connect(self.load_joined_roadsource_canvas)
+        layout_visualize.addLayout(static_sources_layout)
 
     def update_db_label(self):
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
@@ -448,7 +460,17 @@ class EclairDock(QDockWidget):
                 error = e.stderr.decode("utf-8")
                 message_box('Rasterize error',f"Error: {error}")
 
+    def load_joined_pointsource_canvas(self):
+        self.source_type = 'point'
+        self.load_join()
 
+    def load_joined_areasource_canvas(self):
+        self.source_type = 'area'
+        self.load_join()
+
+    def load_joined_roadsource_canvas(self):
+        self.source_type = 'road'
+        self.load_join()
 
     def load_joined_sources_canvas(self):
         for self.source_type in ['point', 'area','road']:
@@ -472,6 +494,8 @@ class EclairDock(QDockWidget):
 
     def load_join(self):
         # create/update emission table to load joined layers
+        # TODO should only create emission table for self.source_type!
+        # in this way, doing all source types every time load_join is called.
         self.create_emission_table_dialog()
         # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
@@ -540,12 +564,6 @@ class EclairDock(QDockWidget):
         self.layer.setName(display_name)
         QgsProject.instance().addMapLayer(self.layer)
 
-
-        processing.run("native:joinattributestable", 
-        {'INPUT':'memory://Point?crs=EPSG:4326&field=id:long(0,0)&field=name:string(0,0)&field=created:datetime(0,0)&field=updated:datetime(0,0)&field=tags:string(0,0)&field=chimney_height:double(0,0)&field=chimney_outer_diameter:double(0,0)&field=chimney_inner_diameter:double(0,0)&field=chimney_gas_speed:double(0,0)&field=chimney_gas_temperature:double(0,0)&field=house_width:long(0,0)&field=house_height:long(0,0)&field=activitycode1_id:long(0,0)&field=activitycode2_id:long(0,0)&field=activitycode3_id:long(0,0)&field=facility_id:long(0,0)&field=timevar_id:long(0,0)&field=source_id:long(0,0)&field=NOx:double(0,0)&field=PM10:double(0,0)&field=SO2:double(0,0)&uid={2e9430f9-1329-4711-9816-f1cf6a321366}',
-        'FIELD':'activitycode1_id',
-        'INPUT_2':'/home/a002469/Demo/Kavadarci-industry.gpkg|layername=edb_activitycode',
-        'FIELD_2':'id','FIELDS_TO_COPY':['code','label'],'METHOD':1,'DISCARD_NONMATCHING':False,'PREFIX':'','OUTPUT':'TEMPORARY_OUTPUT'})
 
     def load_interactive(self):
         # Get the path to the SQLite database file
