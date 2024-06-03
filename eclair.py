@@ -31,7 +31,19 @@ from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
 from PyQt5.QtCore import Qt
 from qgis.utils import iface
-from qgis.core import QgsVectorLayer, QgsProject, QgsDataSourceUri, QgsCoordinateReferenceSystem,  QgsRasterLayer,  QgsProviderRegistry,  QgsCoordinateTransform, QgsVectorLayerJoinInfo
+from qgis.core import (
+    QgsVectorLayer,
+    QgsProject,
+    QgsDataSourceUri,
+    QgsCoordinateReferenceSystem,
+    QgsRasterLayer,
+    QgsProviderRegistry,
+    QgsCoordinateTransform,
+    QgsVectorLayerJoinInfo,
+    QgsMessageLog,
+    QgsLayerTreeLayer,
+    Qgis
+)
 from qgis.gui import QgsProjectionSelectionDialog
 import time
 
@@ -44,10 +56,9 @@ import ast
 import re
 from pathlib import Path
 import datetime
+import json
 
 import processing
-
-
 
 if os.name != "nt":
     ETK_BINPATH = os.path.expanduser("~/.local/bin")
@@ -320,22 +331,70 @@ class EclairDock(QDockWidget):
                 sheets = SHEET_NAMES
             
             from etk.tools.utils import CalledProcessError, run_import
+            # from qgis.PyQt.QtCore import pyqtRemoveInputHook
+            # pyqtRemoveInputHook()
             try:
-                (stderr, stdout) = run_import(file_path, sheets, dry_run=self.dry_run)
-                if self.dry_run:
-                    if "ERROR" in stdout.decode("utf-8"):
-                        # len_errors = len(stdout.decode("utf-8").split("\n"))-2
-                        tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n "
-                        +f"Found errors, correct spreadsheet using error information given below before importing data: \n",
-                        stdout.decode("utf-8"))
+                backup_path, proc = run_import(file_path, sheets, dry_run=self.dry_run)
+                validation_msgs = []
+                updates = []
+
+                # temporary fixes, needs rewrite
+                def handle_line(l):
+                    if l.startswith("VALIDATION"):
+                        validation_msgs.append(l.split("VALIDATION:")[1].strip())
+                    elif l.startswith("DEBUG"):
+                        QgsMessageLog.logMessage(l.split("DEBUG:")[1].strip(), level=Qgis.Info)
+                    elif l.startswith("INFO: successfully"):
+                        if self.dry_run:
+                            changes = eval(l.split("validated")[1].strip())
+                        else:
+                            changes = eval(l.split("imported")[1].strip())
+                        for k, change in changes.items():
+                            updates.append(
+                                f"{k} created: {change.get('created', 0)} "
+                                f"updated: {change.get('updated', 0)}"
+                            )
+                    elif l.startswith("ERROR"):
+                        validation_msgs.append(l)
                     else:
-                        tableDialog = TableDialog(self,'Validation status','Validated file successfully. \n'
-                        + "No changes to database yet, but number of features to be created or updated if file would be imported are summarized in table.",
-                        stdout.decode("utf-8"))
+                        QgsMessageLog.logMessage(l, level=Qgis.Info)
+                
+                for l in proc.stderr:
+                    handle_line(l)
+
+                for l in proc.stdout:
+                    handle_line(l)
+
+                return_code = proc.wait()
+                if backup_path is not None:
+                    backup_path.unlink()
+
+                if self.dry_run:
+                    if len(validation_msgs) > 0:
+                        # len_errors = len(stdout.decode("utf-8").split("\n"))-2
+                        tableDialog = TableDialog(
+                            self,'Validation status',
+                            "Validated file successfully. \n "
+                            "Found errors, correct spreadsheet using error information "
+                            "given below before importing data: \n",
+                            os.linesep.join(validation_msgs)
+                        )
+                    else:
+                        tableDialog = TableDialog(
+                            self,'Validation status',
+                            "Validated file successfully. \n"
+                            "No changes to database yet, but number of features to be "
+                            "created or updated if file would be imported are summarized in table.",
+                            os.linesep.join(updates)
+                        )
                     tableDialog.exec_() 
                 else:
-                    tableDialog = TableDialog(self,'Import status','Imported data successfully. \n'
-                    + ' Number of features created or updated summarized in table.',stdout.decode("utf-8"))
+                    tableDialog = TableDialog(
+                        self, 'Import status',
+                        'Imported data successfully. \n'
+                        ' Number of features created or updated summarized in table.',
+                        os.linesep.join(updates)
+                    )
                     tableDialog.exec_()  
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
@@ -369,6 +428,7 @@ class EclairDock(QDockWidget):
     def create_emission_table_dialog(self):
         #TODO catch exception if database does not have any emissions imported yet
         from etk.tools.utils import CalledProcessError, run_update_emission_tables
+        
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         try:
             (stdout, stderr) = run_update_emission_tables(db_path)
@@ -377,7 +437,7 @@ class EclairDock(QDockWidget):
             message_box('Eclair error',f"Error: {error}")
 
     def aggregate_emissions_dialog(self):
-        self.create_emission_table_dialog()
+        # self.create_emission_table_dialog()
         from etk.tools.utils import CalledProcessError, run_aggregate_emissions
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.xlsx)")
         if (filename == ''):
@@ -403,6 +463,7 @@ class EclairDock(QDockWidget):
     
     def rasterize_emissions_dialog(self):
         from etk.tools.utils import CalledProcessError, run_rasterize_emissions
+
         outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files")
         if (outputpath == ''):
             # user cancelled
@@ -427,15 +488,18 @@ class EclairDock(QDockWidget):
                     return
                 load_canvas = rasterDialog.load_to_canvas
                 if load_canvas:
-                    time_threshold = time.time() 
+                    time_threshold = time.time()
+
                 if rasterDialog.date[0] != '':
+                    begin = datetime.datetime.strptime(rasterDialog.date[0], "%Y-%m-%d")
+                    end = datetime.datetime.strptime(rasterDialog.date[1], "%Y-%m-%d")
                     (stdout, stderr) = run_rasterize_emissions(
                         outputpath,
                         rasterDialog.cell_size, 
                         extent=rasterDialog.extent, 
                         srid=rasterDialog.raster_srid,
-                        begin=rasterDialog.date[0],
-                        end=rasterDialog.date[1]
+                        begin=begin,
+                        end=end
                     )
                 else: 
                     (stdout, stderr) = run_rasterize_emissions(
@@ -450,9 +514,11 @@ class EclairDock(QDockWidget):
                     # Get a list of files in the directory
                     files_in_directory = os.listdir(outputpath)
                     # Filter the list to include only files modified after the time threshold
-                    modified_rasters = [file for file in files_in_directory 
-                    if (os.path.getmtime(os.path.join(outputpath, file)) > time_threshold)
-                    and file.endswith(".nc")]
+                    modified_rasters = [
+                        file for file in files_in_directory 
+                        if (os.path.getmtime(os.path.join(outputpath, file)) > time_threshold)
+                        and file.endswith(".nc")
+                    ]
                     # Check if there are any modified files
                     if modified_rasters:
                         load_rasters_to_canvas(outputpath,modified_rasters)
@@ -496,6 +562,7 @@ class EclairDock(QDockWidget):
         # create/update emission table to load joined layers
         # TODO should only create emission table for self.source_type!
         # in this way, doing all source types every time load_join is called.
+
         self.create_emission_table_dialog()
         # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
@@ -673,6 +740,10 @@ class RasterizeDialog(QDialog):
         self.initUI()
 
     def initUI(self):
+
+        from etk.tools.utils import run_get_settings
+        settings = run_get_settings()
+        
         # Create a layout for the dialog
         self.setWindowTitle("Define rasterize settings")
         layout = QVBoxLayout()
@@ -691,7 +762,7 @@ class RasterizeDialog(QDialog):
         # Initialize with current canvas CRS
         canvas_crs = iface.mapCanvas().mapSettings().destinationCrs()
         canvas_epsg = int(canvas_crs.authid().split(':')[-1])
-        default_epsg = 3857
+        default_epsg = settings.srid
         if canvas_epsg != 4326:
             self.srid_input.setText(str(canvas_epsg))
         else:
@@ -928,10 +999,17 @@ class TableDialog(QDialog):
 
 
 def load_rasters_to_canvas(directory_path, raster_files):
+    project = QgsProject.instance()
+    group_name = Path(directory_path).name
+    root = project.layerTreeRoot()
+    grp = root.addGroup(group_name)
+    
     for raster_file in raster_files:
         # Construct the full path to the raster file
         full_path = os.path.join(directory_path, raster_file)
         # Create a raster layer
         raster_layer = QgsRasterLayer(full_path, raster_file, "gdal")
         # Add the raster layer to the project
-        QgsProject.instance().addMapLayer(raster_layer)
+        project.addMapLayer(raster_layer, False)
+        grp.insertChildNode(1, QgsLayerTreeLayer(raster_layer))
+        # grp.addLayer(layer=lay)
