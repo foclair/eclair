@@ -42,7 +42,7 @@ from qgis.core import (
     QgsVectorLayerJoinInfo,
     QgsMessageLog,
     QgsLayerTreeLayer,
-    Qgis
+    Qgis, QgsApplication, QgsTask,
 )
 from qgis.gui import QgsProjectionSelectionDialog
 import time
@@ -330,80 +330,15 @@ class EclairDock(QDockWidget):
                     return
                 sheets = SHEET_NAMES
             
-            from etk.tools.utils import CalledProcessError, run_import
+            from etk.tools.utils import CalledProcessError
             # from qgis.PyQt.QtCore import pyqtRemoveInputHook
             # pyqtRemoveInputHook()
-            try:
-                backup_path, proc = run_import(file_path, sheets, dry_run=self.dry_run)
-                validation_msgs = []
-                updates = []
-
-                # temporary fixes, needs rewrite
-                def handle_line(l):
-                    if l.startswith("VALIDATION"):
-                        validation_msgs.append(l.split("VALIDATION:")[1].strip())
-                    elif l.startswith("DEBUG"):
-                        QgsMessageLog.logMessage(l.split("DEBUG:")[1].strip(), level=Qgis.Info)
-                    elif l.startswith("INFO: successfully"):
-                        if self.dry_run:
-                            changes = eval(l.split("validated")[1].strip())
-                        else:
-                            changes = eval(l.split("imported")[1].strip())
-                        for k, change in changes.items():
-                            updates.append(
-                                f"{k} created: {change.get('created', 0)} "
-                                f"updated: {change.get('updated', 0)}"
-                            )
-                    elif l.startswith("ERROR"):
-                        validation_msgs.append(l)
-                    else:
-                        QgsMessageLog.logMessage(l, level=Qgis.Info)
-                
-                for l in proc.stderr:
-                    handle_line(l)
-
-                for l in proc.stdout:
-                    handle_line(l)
-
-                return_code = proc.wait()
-                if backup_path is not None:
-                    backup_path.unlink()
-
-                if self.dry_run:
-                    if len(validation_msgs) > 0:
-                        # len_errors = len(stdout.decode("utf-8").split("\n"))-2
-                        tableDialog = TableDialog(
-                            self,'Validation status',
-                            "Validated file successfully. \n "
-                            "Found errors, correct spreadsheet using error information "
-                            "given below before importing data: \n",
-                            os.linesep.join(validation_msgs)
-                        )
-                    else:
-                        tableDialog = TableDialog(
-                            self,'Validation status',
-                            "Validated file successfully. \n"
-                            "No changes to database yet, but number of features to be "
-                            "created or updated if file would be imported are summarized in table.",
-                            os.linesep.join(updates)
-                        )
-                    tableDialog.exec_() 
-                else:
-                    tableDialog = TableDialog(
-                        self, 'Import status',
-                        'Imported data successfully. \n'
-                        ' Number of features created or updated summarized in table.',
-                        os.linesep.join(updates)
-                    )
-                    tableDialog.exec_()  
-            except CalledProcessError as e:
-                error = e.stderr.decode("utf-8")
-                if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
-                    message_box('Error',f"Error: a target database is not specified yet,"
-                    +" choose an existing or create a new database first.")
-                else:
-                    import_error = error.split('ImportError:')[-1]
-                    message_box('Import error',f"Error: {import_error}")
+            if self.dry_run:
+                description = "Eclair data validation"
+            else:
+                description = "Eclair data import"
+            self.importtask = RunImportTask(description,file_path,sheets,self.dry_run)
+            QgsApplication.taskManager().addTask(self.importtask)
         else:
             # user cancelled
             message_box('Import error','No file chosen, no data imported.')
@@ -1013,3 +948,128 @@ def load_rasters_to_canvas(directory_path, raster_files):
         project.addMapLayer(raster_layer, False)
         grp.insertChildNode(1, QgsLayerTreeLayer(raster_layer))
         # grp.addLayer(layer=lay)
+
+
+MESSAGE_CATEGORY = "Eclair info"
+
+class RunImportTask(QgsTask):
+    def __init__(self, description, file_path, sheets, dry_run=False):
+        super().__init__(description, QgsTask.CanCancel)
+        self.file_path = file_path
+        self.sheets = sheets
+        self.dry_run = dry_run
+        self.exception = None
+
+    def run(self):
+        """Implement heavy lifting.
+        Should periodically test for isCanceled() to gracefully abort.
+        Raising exceptions here will crash QGIS, raise them in self.finished instead.
+        """
+        QgsMessageLog.logMessage('Started import task', MESSAGE_CATEGORY, Qgis.Info)
+        from etk.tools.utils import run_import
+        try:
+            self.backup_path, self.proc = run_import(self.file_path, self.sheets, dry_run=self.dry_run)
+        except CalledProcessError as e:
+            self.exception =  e
+            return False
+        # use self.setProgress to report progress
+        # self.setProgress(10)
+        if self.isCanceled():
+            stopped(task, MESSAGE_CATEGORY)
+            return False
+        return True
+
+    def finished(self, result):
+        """
+        This function is automatically called when the task has
+        completed (successfully or not). Result is the return value from self.run
+        """
+        if result:
+            QgsMessageLog.logMessage(
+                'Task "{name}" completed\n'.format(name=self.description()),
+                MESSAGE_CATEGORY, Qgis.Success)
+            validation_msgs = []
+            updates = []
+
+            # temporary fixes, needs rewrite
+            def handle_line(l):
+                if l.startswith("VALIDATION"):
+                    validation_msgs.append(l.split("VALIDATION:")[1].strip())
+                elif l.startswith("DEBUG"):
+                    QgsMessageLog.logMessage(l.split("DEBUG:")[1].strip(), level=Qgis.Info)
+                elif l.startswith("INFO: successfully"):
+                    if self.dry_run:
+                        changes = eval(l.split("validated")[1].strip())
+                    else:
+                        changes = eval(l.split("imported")[1].strip())
+                    for k, change in changes.items():
+                        updates.append(
+                            f"{k} created: {change.get('created', 0)} "
+                            f"updated: {change.get('updated', 0)}"
+                        )
+                elif l.startswith("ERROR"):
+                    validation_msgs.append(l)
+                else:
+                    QgsMessageLog.logMessage(l, level=Qgis.Info)
+            
+            for l in self.proc.stderr:
+                handle_line(l)
+
+            for l in self.proc.stdout:
+                handle_line(l)
+
+            return_code = self.proc.wait()
+            if self.backup_path is not None:
+                self.backup_path.unlink()
+
+            if self.dry_run:
+                if len(validation_msgs) > 0:
+                    # len_errors = len(stdout.decode("utf-8").split("\n"))-2
+                    tableDialog = TableDialog(
+                        self,'Validation status',
+                        "Validated file successfully. \n "
+                        "Found errors, correct spreadsheet using error information "
+                        "given below before importing data: \n",
+                        os.linesep.join(validation_msgs)
+                    )
+                else:
+                    tableDialog = TableDialog(
+                        self,'Validation status',
+                        "Validated file successfully. \n"
+                        "No changes to database yet, but number of features to be "
+                        "created or updated if file would be imported are summarized in table.",
+                        os.linesep.join(updates)
+                    )
+                tableDialog.exec_() 
+            else:
+                tableDialog = TableDialog(
+                    self, 'Import status',
+                    'Imported data successfully. \n'
+                    ' Number of features created or updated summarized in table.',
+                    os.linesep.join(updates)
+                )
+                tableDialog.exec_()  
+        else:
+            if self.exception is None:
+                QgsMessageLog.logMessage(
+                    'Task "{name}" not successful but without '\
+                    'exception (probably the task was manually '\
+                    'canceled by the user)'.format(
+                        name=self.description()),
+                    MESSAGE_CATEGORY, Qgis.Warning)
+            else:
+                error = self.exception.stderr.decode("utf-8")
+                if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
+                    message_box('Error',f"Error: a target database is not specified yet,"
+                    +" choose an existing or create a new database first.")
+                else:
+                    import_error = error.split('ImportError:')[-1]
+                    message_box('Import error',f"Error: {import_error}")
+
+
+    def cancel(self):
+        QgsMessageLog.logMessage(
+            'RandomTask "{name}" was canceled'.format(
+                name=self.description()),
+            MESSAGE_CATEGORY, Qgis.Info)
+        super().cancel()
