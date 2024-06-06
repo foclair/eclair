@@ -877,14 +877,8 @@ class TableDialog(QDialog):
         label = QLabel(self.text)
         layout.addWidget(label)
 
-        if self.plugin.dry_run:
-            pattern = r"data to be imported (.+)\n"
-        else:
-            pattern = r"imported data (.+)\n"
-
-        match = re.search(pattern, str(self.stdout))
-        if match is not None:
-            table_dict = eval(match.group(1))
+        if type(self.stdout) == dict:
+            table_dict = self.stdout
 
             # TODO: do not know whether timevar is updated or created, 
             # skipping from progress tabel for now
@@ -927,6 +921,8 @@ class TableDialog(QDialog):
             layout.addWidget(tableWidget)
         else:
             label = QLabel(self.stdout)
+            layout.addWidget(label)
+            label = QLabel("getting here")
             layout.addWidget(label)
 
         self.setLayout(layout)
@@ -991,6 +987,8 @@ class RunImportTask(QgsTask):
             validation_msgs = []
             updates = []
 
+            # message_box("test", self.proc.stderr.read()) # all output even if successful
+
             # temporary fixes, needs rewrite
             def handle_line(l):
                 if l.startswith("VALIDATION"):
@@ -1002,18 +1000,16 @@ class RunImportTask(QgsTask):
                         changes = eval(l.split("validated")[1].strip())
                     else:
                         changes = eval(l.split("imported")[1].strip())
-                    for k, change in changes.items():
-                        updates.append(
-                            f"{k} created: {change.get('created', 0)} "
-                            f"updated: {change.get('updated', 0)}"
-                        )
+                    return changes
+
                 elif l.startswith("ERROR"):
                     validation_msgs.append(l)
                 else:
                     QgsMessageLog.logMessage(l, level=Qgis.Info)
+                return None
             
             for l in self.proc.stderr:
-                handle_line(l)
+                changes = handle_line(l)
 
             for l in self.proc.stdout:
                 handle_line(l)
@@ -1038,7 +1034,7 @@ class RunImportTask(QgsTask):
                         "Validated file successfully. \n"
                         "No changes to database yet, but number of features to be "
                         "created or updated if file would be imported are summarized in table.",
-                        os.linesep.join(updates)
+                        changes
                     )
                 tableDialog.exec_() 
             else:
@@ -1046,7 +1042,7 @@ class RunImportTask(QgsTask):
                     self, 'Import status',
                     'Imported data successfully. \n'
                     ' Number of features created or updated summarized in table.',
-                    os.linesep.join(updates)
+                    changes #os.linesep.join(updates)
                 )
                 tableDialog.exec_()  
         else:
