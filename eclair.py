@@ -25,7 +25,7 @@
 from PyQt5.QtWidgets import QApplication, QAction, QWidget, QDockWidget, QTableWidget, QTableWidgetItem
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox, QComboBox
 from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup, QTabWidget, QMainWindow, QLineEdit
-
+from PyQt5.QtCore import pyqtSlot
 
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
@@ -57,6 +57,8 @@ import re
 from pathlib import Path
 import datetime
 import json
+
+import sqlite3
 
 import processing
 
@@ -337,7 +339,7 @@ class EclairDock(QDockWidget):
                 description = "Eclair data validation"
             else:
                 description = "Eclair data import"
-            self.importtask = RunImportTask(description,file_path,sheets,self.dry_run)
+            self.importtask = RunImportTask(description,file_path,sheets)
             QgsApplication.taskManager().addTask(self.importtask)
         else:
             # user cancelled
@@ -382,16 +384,18 @@ class EclairDock(QDockWidget):
             try:
                 self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
                 # Load codesets table
-                layer = QgsVectorLayer(f"{self.db_path}|layername=codesets", "codesets", 'ogr')
-                codesets = []
-                for codeset in layer.getFeatures():
-                    codesets.append(codeset["slug"])
-                # codesetDialog = ChooseCodesetDialog(self,codesets)
-                # codesetDialog.exec_()
-                message_box('Aggregate emissions',f"Aggregate emissions for codeset NFR")
-                #TODO take first codeset by default, but should give user choice which to aggregate for
-                (stdout, stderr) = run_aggregate_emissions(filename,codeset="NFR")
-                message_box('Aggregate emissions',"Successfully aggregated emissions.")
+                connection = sqlite3.connect(self.db_path)
+                cursor = connection.cursor()
+                cursor.execute("SELECT slug FROM codesets LIMIT 3")
+                codesets = [row[0] for row in cursor.fetchall()]
+                connection.close()
+                if len(codesets) > 0:
+                    codesetDialog = ChooseCodesetDialog(self,filename,codesets)
+                    codesetDialog.exec_()
+                else:
+                    # aggregating all substances when no codeset defined
+                    (stdout, stderr) = run_aggregate_emissions(filename)
+                    message_box('Aggregate emissions',"Successfully aggregated emissions.")
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 message_box('Aggregation error',f"Error: {error}")
@@ -832,8 +836,9 @@ class RasterizeDialog(QDialog):
         self.accept()
 
 class ChooseCodesetDialog(QDialog):
-    def __init__(self,plugin, codesets=None):
+    def __init__(self,plugin, filename, codesets=None):
         super().__init__()
+        self.filename = filename
         self.codesets = codesets
         self.initUI()
 
@@ -842,16 +847,24 @@ class ChooseCodesetDialog(QDialog):
         layout = QVBoxLayout()
         label = QLabel("Choose the codeset for which emissions should be aggregated.")
         layout.addWidget(label)
+        label = QLabel(str(self.codesets))
+        layout.addWidget(label)
 
         layout_buttons = QHBoxLayout()
-        for self.codeset in self.codesets:
-            btn_action = QPushButton(self.codeset)
+        for codeset_i in self.codesets:
+            btn_action = QPushButton(codeset_i)
             layout.addWidget(btn_action)
-            btn_action.clicked.connect(self.run_aggregation)
-    
-    def run_aggregation(self):
+            btn_action.clicked.connect(lambda checked, cs=codeset_i: self.run_aggregation(cs))
+        
+        self.setLayout(layout)
+
+    @pyqtSlot()
+    def run_aggregation(self,codeset):
+        self.accept()
+        from etk.tools.utils import CalledProcessError, run_aggregate_emissions
         try:
-            (stdout, stderr) = run_aggregate_emissions(filename,codeset=self.codeset)
+            message_box('Aggregate emissions',"Aggregate for codeset "+str(codeset)+" starts after clicking OK.\n This may take some time, please wait.")
+            (stdout, stderr) = run_aggregate_emissions(self.filename,codeset=codeset)
             message_box('Aggregate emissions',"Successfully aggregated emissions.")
         except CalledProcessError as e:
             error = e.stderr.decode("utf-8")
@@ -953,8 +966,13 @@ class RunImportTask(QgsTask):
         super().__init__(description, QgsTask.CanCancel)
         self.file_path = file_path
         self.sheets = sheets
-        self.dry_run = dry_run
+        if "validation" in self.description():
+            self.dry_run = True
+        else:
+            self.dry_run = False
         self.exception = None
+        message_box("test",self.file_path)
+        message_box("test",str(self.dry_run)+str(self.sheets))
 
     def run(self):
         """Implement heavy lifting.
@@ -987,7 +1005,7 @@ class RunImportTask(QgsTask):
             validation_msgs = []
             updates = []
 
-            # message_box("test", self.proc.stderr.read()) # all output even if successful
+            message_box("test", self.proc.stderr.read()) # all output even if successful
 
             # temporary fixes, needs rewrite
             def handle_line(l):
@@ -1001,7 +1019,6 @@ class RunImportTask(QgsTask):
                     else:
                         changes = eval(l.split("imported")[1].strip())
                     return changes
-
                 elif l.startswith("ERROR"):
                     validation_msgs.append(l)
                 else:
@@ -1020,7 +1037,7 @@ class RunImportTask(QgsTask):
 
             if self.dry_run:
                 if len(validation_msgs) > 0:
-                    # len_errors = len(stdout.decode("utf-8").split("\n"))-2
+                    # len_errors = len(validation_msgs) - 1 
                     tableDialog = TableDialog(
                         self,'Validation status',
                         "Validated file successfully. \n "
