@@ -48,6 +48,7 @@ from qgis.gui import QgsProjectionSelectionDialog
 import time
 
 import os
+import glob
 import sys
 import subprocess
 import site
@@ -57,6 +58,7 @@ import re
 from pathlib import Path
 import datetime
 import json
+from tempfile import gettempdir
 
 import sqlite3
 
@@ -314,10 +316,11 @@ class EclairDock(QDockWidget):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open spreadsheet with point- and/or areasource data file", "", "Spreadsheet files (*.xlsx)")
         if file_path: #if file_path not empty string (user did not click cancel)
             from openpyxl import load_workbook
-            workbook = load_workbook(filename=file_path, data_only=True)
+            workbook = load_workbook(filename=file_path, data_only=True, read_only=True)
             # workbook.worksheets  compare to SHEET_NAMES
             from etk.edb.const import SHEET_NAMES
             valid_sheets = [sheet.title for sheet in workbook.worksheets if sheet.title in SHEET_NAMES]
+            workbook.close()
             
             checkboxDialog = CheckboxDialog(self,valid_sheets, self.dry_run)
             result = checkboxDialog.exec_()  # Show the dialog as a modal dialog
@@ -971,8 +974,8 @@ class RunImportTask(QgsTask):
         else:
             self.dry_run = False
         self.exception = None
-        message_box("test",self.file_path)
-        message_box("test",str(self.dry_run)+str(self.sheets))
+        # message_box("test",self.file_path)
+        # message_box("test",str(self.dry_run)+str(self.sheets))
 
     def run(self):
         """Implement heavy lifting.
@@ -980,9 +983,16 @@ class RunImportTask(QgsTask):
         Raising exceptions here will crash QGIS, raise them in self.finished instead.
         """
         QgsMessageLog.logMessage('Started import task', MESSAGE_CATEGORY, Qgis.Info)
-        from etk.tools.utils import run_import
+
+        from etk.tools.utils import run_import, CalledProcessError
         try:
             self.backup_path, self.proc = run_import(self.file_path, self.sheets, dry_run=self.dry_run)
+            # advantage of waiting befor going to finished is that this is still background task!
+            # that is not the case when waiting during read_file function
+            # wait_time = 10
+            # result = subprocess.run(["python", "-c", f"from time import sleep ; sleep({wait_time})"], capture_output = True, text = True)
+            
+            
         except CalledProcessError as e:
             self.exception =  e
             return False
@@ -1002,10 +1012,25 @@ class RunImportTask(QgsTask):
             QgsMessageLog.logMessage(
                 'Task "{name}" completed\n'.format(name=self.description()),
                 MESSAGE_CATEGORY, Qgis.Success)
+            output_path = os.path.dirname(os.environ.get("ETK_DATABASE_PATH"))
+            # TODO rm all stdout, anyhow always empty
+            if self.dry_run:
+                stdout_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stdout.log'))
+                stderr_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stderr.log'))
+            else:
+                stdout_files = glob.glob(os.path.join(output_path, 'etk_import_*_stdout.log'))
+                stderr_files = glob.glob(os.path.join(output_path, 'etk_import_*_stderr.log'))
+            
+            # Read the latest stderr file
+            stderr_files.sort(key=lambda f: int(f.split('_')[-2]))
+            if stderr_files:
+                latest_stderr_file = stderr_files[-1]
+                stderr_content = read_file_with_retries(latest_stderr_file)
+            else:
+                stderr_content = None
+                
             validation_msgs = []
             updates = []
-
-            message_box("test", self.proc.stderr.read()) # all output even if successful
 
             # temporary fixes, needs rewrite
             def handle_line(l):
@@ -1025,13 +1050,16 @@ class RunImportTask(QgsTask):
                     QgsMessageLog.logMessage(l, level=Qgis.Info)
                 return None
             
-            for l in self.proc.stderr:
-                changes = handle_line(l)
+            #for l in stderr_content[-1]:
+            if  'successfully' in stderr_content:
+                changes = handle_line(stderr_content.split('\n')[-2])
+            # else:
+            #     from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
+            # for l in self.proc.stdout:
+            #     handle_line(l)
+            else:
+                changes = {'notworking': {'updated': 0, 'created': 0}}
 
-            for l in self.proc.stdout:
-                handle_line(l)
-
-            return_code = self.proc.wait()
             if self.backup_path is not None:
                 self.backup_path.unlink()
 
@@ -1086,3 +1114,17 @@ class RunImportTask(QgsTask):
                 name=self.description()),
             MESSAGE_CATEGORY, Qgis.Info)
         super().cancel()
+
+
+def read_file_with_retries(file_path, retries=15, delay=1):
+    for _ in range(retries):
+        try:
+            if os.path.getsize(file_path) > 0:  # Check if the file size is greater than zero
+                with open(file_path, 'r') as f:
+                    return f.read()
+            else:
+                time.sleep(delay)
+        except IOError:
+            time.sleep(delay)
+    raise IOError(f"Failed to read file after {retries} retries")
+
