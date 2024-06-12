@@ -938,8 +938,6 @@ class TableDialog(QDialog):
         else:
             label = QLabel(self.stdout)
             layout.addWidget(label)
-            label = QLabel("getting here")
-            layout.addWidget(label)
 
         self.setLayout(layout)
         self.adjustSize()
@@ -987,17 +985,17 @@ class RunImportTask(QgsTask):
         from etk.tools.utils import run_import, CalledProcessError
         try:
             self.backup_path, self.proc = run_import(self.file_path, self.sheets, dry_run=self.dry_run)
-            # advantage of waiting befor going to finished is that this is still background task!
-            # that is not the case when waiting during read_file function
-            # wait_time = 10
-            # result = subprocess.run(["python", "-c", f"from time import sleep ; sleep({wait_time})"], capture_output = True, text = True)
+            # use self.setProgress to report progress
+            self.setProgress(90)
+            # wait 3 seconds in background to have a chance that stdout/stderr files ready with writing
+            wait_time = 3
+            result = subprocess.run(["python", "-c", f"from time import sleep ; sleep({wait_time})"], capture_output = True, text = True)
             
             
         except CalledProcessError as e:
             self.exception =  e
             return False
-        # use self.setProgress to report progress
-        # self.setProgress(10)
+
         if self.isCanceled():
             stopped(task, MESSAGE_CATEGORY)
             return False
@@ -1028,37 +1026,30 @@ class RunImportTask(QgsTask):
                 stderr_content = read_file_with_retries(latest_stderr_file)
             else:
                 stderr_content = None
-                
+
             validation_msgs = []
             updates = []
 
-            # temporary fixes, needs rewrite
             def handle_line(l):
                 if l.startswith("VALIDATION"):
                     validation_msgs.append(l.split("VALIDATION:")[1].strip())
-                elif l.startswith("DEBUG"):
-                    QgsMessageLog.logMessage(l.split("DEBUG:")[1].strip(), level=Qgis.Info)
-                elif l.startswith("INFO: successfully"):
-                    if self.dry_run:
-                        changes = eval(l.split("validated")[1].strip())
-                    else:
-                        changes = eval(l.split("imported")[1].strip())
-                    return changes
                 elif l.startswith("ERROR"):
                     validation_msgs.append(l)
                 else:
                     QgsMessageLog.logMessage(l, level=Qgis.Info)
                 return None
             
-            #for l in stderr_content[-1]:
+
             if  'successfully' in stderr_content:
-                changes = handle_line(stderr_content.split('\n')[-2])
-            # else:
-            #     from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
-            # for l in self.proc.stdout:
-            #     handle_line(l)
+                if self.dry_run:
+                    changes = eval(stderr_content.split('\n')[-2].split("validated")[1].strip())
+                else:
+                    changes = eval(stderr_content.split('\n')[-2].split("imported")[1].strip())
             else:
-                changes = {'notworking': {'updated': 0, 'created': 0}}
+                for l in stderr_content.split('\n'):
+                    handle_line(l)
+            #else:
+            #    changes = {'notworking': {'updated': 0, 'created': 0}}
 
             if self.backup_path is not None:
                 self.backup_path.unlink()
@@ -1083,12 +1074,21 @@ class RunImportTask(QgsTask):
                     )
                 tableDialog.exec_() 
             else:
-                tableDialog = TableDialog(
-                    self, 'Import status',
-                    'Imported data successfully. \n'
-                    ' Number of features created or updated summarized in table.',
-                    changes #os.linesep.join(updates)
-                )
+                if len(validation_msgs) > 0:
+                    tableDialog = TableDialog(
+                        self,'Import status',
+                        "Did not import file successfully. \n "
+                        "Import stopped at error. First validate the file, correct spreadsheet using error information "
+                        "given below untill reaching a successful validation before importing data: \n",
+                        os.linesep.join(validation_msgs)
+                    )
+                else:
+                    tableDialog = TableDialog(
+                        self, 'Import status',
+                        'Imported data successfully. \n'
+                        ' Number of features created or updated summarized in table.',
+                        changes 
+                    )
                 tableDialog.exec_()  
         else:
             if self.exception is None:
