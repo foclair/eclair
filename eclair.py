@@ -972,8 +972,6 @@ class RunImportTask(QgsTask):
         else:
             self.dry_run = False
         self.exception = None
-        # message_box("test",self.file_path)
-        # message_box("test",str(self.dry_run)+str(self.sheets))
 
     def run(self):
         """Implement heavy lifting.
@@ -982,7 +980,7 @@ class RunImportTask(QgsTask):
         """
         QgsMessageLog.logMessage('Started import task', MESSAGE_CATEGORY, Qgis.Info)
 
-        from etk.tools.utils import run_import, CalledProcessError
+        from etk.tools.utils import run_import
         try:
             self.backup_path, self.proc = run_import(self.file_path, self.sheets, dry_run=self.dry_run)
             # use self.setProgress to report progress
@@ -992,7 +990,7 @@ class RunImportTask(QgsTask):
             result = subprocess.run(["python", "-c", f"from time import sleep ; sleep({wait_time})"], capture_output = True, text = True)
             
             
-        except CalledProcessError as e:
+        except Exception as e:
             self.exception =  e
             return False
 
@@ -1039,23 +1037,33 @@ class RunImportTask(QgsTask):
                     QgsMessageLog.logMessage(l, level=Qgis.Info)
                 return None
             
-
+            error = False
             if  'successfully' in stderr_content:
                 if self.dry_run:
                     changes = eval(stderr_content.split('\n')[-2].split("validated")[1].strip())
                 else:
                     changes = eval(stderr_content.split('\n')[-2].split("imported")[1].strip())
+            elif 'Traceback' in stderr_content:
+                traceback = stderr_content
+                error = True
             else:
                 for l in stderr_content.split('\n'):
                     handle_line(l)
-            #else:
-            #    changes = {'notworking': {'updated': 0, 'created': 0}}
 
             if self.backup_path is not None:
                 self.backup_path.unlink()
 
             if self.dry_run:
-                if len(validation_msgs) > 0:
+                if error:
+                    # from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
+                    tableDialog = TableDialog(
+                        self,'Validation status',
+                        "Did not validate full file. \n "
+                        "Error occurred that could not be handled by validation \n"
+                        "Try to correct spreadsheet using error information below: \n ",
+                        os.linesep.join(traceback.split('\n'))
+                    )
+                elif len(validation_msgs) > 0:
                     # len_errors = len(validation_msgs) - 1 
                     tableDialog = TableDialog(
                         self,'Validation status',
@@ -1074,6 +1082,15 @@ class RunImportTask(QgsTask):
                     )
                 tableDialog.exec_() 
             else:
+                if error:
+                    tableDialog = TableDialog(
+                        self,'Import status',
+                        "Did not import file successfully. \n "
+                        "Error occurred that could not be handled by Eclair. \n"
+                        "First validate the file, correct spreadsheet using error information  \n"
+                        "given below untill reaching a successful validation before importing data: \n",
+                        os.linesep.join(traceback.split('\n'))
+                    )
                 if len(validation_msgs) > 0:
                     tableDialog = TableDialog(
                         self,'Import status',
