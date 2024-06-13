@@ -63,6 +63,8 @@ from tempfile import gettempdir
 import sqlite3
 
 import processing
+# import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 if os.name != "nt":
     ETK_BINPATH = os.path.expanduser("~/.local/bin")
@@ -80,7 +82,19 @@ else:
     # os.environ['PATH'] = OSGEO4W + r"\bin;" + os.environ['PATH']
     os.environ['PATH'] = os.path.expanduser("~\AppData\Roaming\Python\Python39\Scripts;") + os.environ['PATH']
 
-       
+from etk.edb.const import SHEET_NAMES
+from etk.tools.utils import (
+    CalledProcessError, 
+    create_from_template, 
+    set_settings_srid,
+    run_import,
+    run_export,
+    run_update_emission_tables,
+    run_aggregate_emissions, 
+    run_rasterize_emissions,
+    run_get_settings
+)
+        
 class Eclair(QWidget):
     def __init__(self, iface):
         super(Eclair, self).__init__()
@@ -287,7 +301,6 @@ class EclairDock(QDockWidget):
             # user cancelled
             message_box('Warning','No *.gpkg file chosen, database not created.')
         else:
-            from etk.tools.utils import CalledProcessError, create_from_template, set_settings_srid
             try:
                 epsg = self.show_srid_dialog()
                 proc = create_from_template(db_path)
@@ -318,7 +331,6 @@ class EclairDock(QDockWidget):
             from openpyxl import load_workbook
             workbook = load_workbook(filename=file_path, data_only=True, read_only=True)
             # workbook.worksheets  compare to SHEET_NAMES
-            from etk.edb.const import SHEET_NAMES
             valid_sheets = [sheet.title for sheet in workbook.worksheets if sheet.title in SHEET_NAMES]
             workbook.close()
             
@@ -335,7 +347,6 @@ class EclairDock(QDockWidget):
                     return
                 sheets = SHEET_NAMES
             
-            from etk.tools.utils import CalledProcessError
             # from qgis.PyQt.QtCore import pyqtRemoveInputHook
             # pyqtRemoveInputHook()
             if self.dry_run:
@@ -351,7 +362,6 @@ class EclairDock(QDockWidget):
 
 
     def export_dialog(self):
-        from etk.tools.utils import CalledProcessError, run_export
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for exported emissions", "", "(*.xlsx)")
         if (filename == ''):
             # user cancelled
@@ -366,9 +376,7 @@ class EclairDock(QDockWidget):
     
 
     def create_emission_table_dialog(self):
-        #TODO catch exception if database does not have any emissions imported yet
-        from etk.tools.utils import CalledProcessError, run_update_emission_tables
-        
+        #TODO catch exception if database does not have any emissions imported yet       
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         try:
             (stdout, stderr) = run_update_emission_tables(db_path)
@@ -378,7 +386,6 @@ class EclairDock(QDockWidget):
 
     def aggregate_emissions_dialog(self):
         # self.create_emission_table_dialog()
-        from etk.tools.utils import CalledProcessError, run_aggregate_emissions
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.xlsx)")
         if (filename == ''):
             # user cancelled
@@ -404,8 +411,6 @@ class EclairDock(QDockWidget):
                 message_box('Aggregation error',f"Error: {error}")
     
     def rasterize_emissions_dialog(self):
-        from etk.tools.utils import CalledProcessError, run_rasterize_emissions
-
         outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files")
         if (outputpath == ''):
             # user cancelled
@@ -682,8 +687,6 @@ class RasterizeDialog(QDialog):
         self.initUI()
 
     def initUI(self):
-
-        from etk.tools.utils import run_get_settings
         settings = run_get_settings()
         
         # Create a layout for the dialog
@@ -864,7 +867,6 @@ class ChooseCodesetDialog(QDialog):
     @pyqtSlot()
     def run_aggregation(self,codeset):
         self.accept()
-        from etk.tools.utils import CalledProcessError, run_aggregate_emissions
         try:
             message_box('Aggregate emissions',"Aggregate for codeset "+str(codeset)+" starts after clicking OK.\n This may take some time, please wait.")
             (stdout, stderr) = run_aggregate_emissions(self.filename,codeset=codeset)
@@ -979,37 +981,13 @@ class RunImportTask(QgsTask):
         Raising exceptions here will crash QGIS, raise them in self.finished instead.
         """
         QgsMessageLog.logMessage('Started import task', MESSAGE_CATEGORY, Qgis.Info)
-
-        from etk.tools.utils import run_import
         try:
             self.backup_path, self.proc = run_import(self.file_path, self.sheets, dry_run=self.dry_run)
-            # use self.setProgress to report progress
-            self.setProgress(90)
-            # wait 3 seconds in background to have a chance that stdout/stderr files ready with writing
+            # wait 3 seconds to make sure stdout/stderr created
             wait_time = 3
             result = subprocess.run(["python", "-c", f"from time import sleep ; sleep({wait_time})"], capture_output = True, text = True)
             
-            
-        except Exception as e:
-            self.exception =  e
-            return False
-
-        if self.isCanceled():
-            stopped(task, MESSAGE_CATEGORY)
-            return False
-        return True
-
-    def finished(self, result):
-        """
-        This function is automatically called when the task has
-        completed (successfully or not). Result is the return value from self.run
-        """
-        if result:
-            QgsMessageLog.logMessage(
-                'Task "{name}" completed\n'.format(name=self.description()),
-                MESSAGE_CATEGORY, Qgis.Success)
             output_path = os.path.dirname(os.environ.get("ETK_DATABASE_PATH"))
-            # TODO rm all stdout, anyhow always empty
             if self.dry_run:
                 stdout_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stdout.log'))
                 stderr_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stderr.log'))
@@ -1021,9 +999,41 @@ class RunImportTask(QgsTask):
             stderr_files.sort(key=lambda f: int(f.split('_')[-2]))
             if stderr_files:
                 latest_stderr_file = stderr_files[-1]
-                stderr_content = read_file_with_retries(latest_stderr_file)
+                for i in range(1200):
+                    # Check if the file size is greater than zero
+                    if os.path.getsize(latest_stderr_file) > 0: 
+                        with open(latest_stderr_file, 'r') as f:
+                            self.stderr_content = f.read()
+                            return True
+                    else:
+                        time.sleep(1)
+                        if i < 51:
+                            self.setProgress(i)
+                        else:
+                            self.setProgress(50+i/1150.*50.)
+                self.exception = "Failed to import file within 20 minutes, decrease file size"
+                return False
             else:
-                stderr_content = None
+                self.stderr_content = None
+        except Exception as e:
+            self.exception =  e
+            return False
+
+        if self.isCanceled():
+            stopped(task, MESSAGE_CATEGORY)
+            return False
+        return True
+        
+
+    def finished(self, result):
+        """
+        This function is automatically called when the task has
+        completed (successfully or not). Result is the return value from self.run
+        """
+        if result:
+            QgsMessageLog.logMessage(
+                'Task "{name}" completed\n'.format(name=self.description()),
+                MESSAGE_CATEGORY, Qgis.Success)
 
             validation_msgs = []
             updates = []
@@ -1038,16 +1048,16 @@ class RunImportTask(QgsTask):
                 return None
             
             error = False
-            if  'successfully' in stderr_content:
+            if  'successfully' in self.stderr_content:
                 if self.dry_run:
-                    changes = eval(stderr_content.split('\n')[-2].split("validated")[1].strip())
+                    changes = eval(self.stderr_content.split('\n')[-2].split("validated")[1].strip())
                 else:
-                    changes = eval(stderr_content.split('\n')[-2].split("imported")[1].strip())
-            elif 'Traceback' in stderr_content:
-                traceback = stderr_content
+                    changes = eval(self.stderr_content.split('\n')[-2].split("imported")[1].strip())
+            elif 'Traceback' in self.stderr_content:
+                traceback = self.stderr_content
                 error = True
             else:
-                for l in stderr_content.split('\n'):
+                for l in self.stderr_content.split('\n'):
                     handle_line(l)
 
             if self.backup_path is not None:
@@ -1108,6 +1118,7 @@ class RunImportTask(QgsTask):
                     )
                 tableDialog.exec_()  
         else:
+            from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
             if self.exception is None:
                 QgsMessageLog.logMessage(
                     'Task "{name}" not successful but without '\
@@ -1116,7 +1127,10 @@ class RunImportTask(QgsTask):
                         name=self.description()),
                     MESSAGE_CATEGORY, Qgis.Warning)
             else:
-                error = self.exception.stderr.decode("utf-8")
+                if type(self.exception) == str:
+                    error = self.exception
+                else:
+                    error = self.exception.stderr.decode("utf-8")
                 if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
                     message_box('Error',f"Error: a target database is not specified yet,"
                     +" choose an existing or create a new database first.")
@@ -1127,21 +1141,11 @@ class RunImportTask(QgsTask):
 
     def cancel(self):
         QgsMessageLog.logMessage(
-            'RandomTask "{name}" was canceled'.format(
+            'Task "{name}" was canceled'.format(
                 name=self.description()),
             MESSAGE_CATEGORY, Qgis.Info)
         super().cancel()
 
 
-def read_file_with_retries(file_path, retries=15, delay=1):
-    for _ in range(retries):
-        try:
-            if os.path.getsize(file_path) > 0:  # Check if the file size is greater than zero
-                with open(file_path, 'r') as f:
-                    return f.read()
-            else:
-                time.sleep(delay)
-        except IOError:
-            time.sleep(delay)
-    raise IOError(f"Failed to read file after {retries} retries")
+
 
