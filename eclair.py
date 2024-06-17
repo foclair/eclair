@@ -372,11 +372,15 @@ class EclairDock(QDockWidget):
     def create_emission_table(self):
         #TODO catch exception if database does not have any emissions imported yet       
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
-        try:
-            (stdout, stderr) = run_update_emission_tables(db_path)
-        except CalledProcessError as e:
-            error = e.stderr.decode("utf-8")
-            message_box('Eclair error',f"Error: {error}")
+        self.task = RunBackgroundTask(
+                description="Prepare emissions for static visualisation",
+                function=run_update_emission_tables,
+                parent=self,
+                db_path=db_path,
+                sourcetypes=self.source_type
+        )
+        QgsApplication.taskManager().addTask(self.task)
+
 
     def aggregate_emissions_dialog(self):
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.xlsx)")
@@ -471,19 +475,20 @@ class EclairDock(QDockWidget):
 
     def load_joined_pointsource_canvas(self):
         self.source_type = 'point'
-        self.load_join()
+        self.create_emission_table()
+
 
     def load_joined_areasource_canvas(self):
         self.source_type = 'area'
-        self.load_join()
+        self.create_emission_table()
 
     def load_joined_roadsource_canvas(self):
         self.source_type = 'road'
-        self.load_join()
+        self.create_emission_table()
 
     def load_joined_sources_canvas(self):
         for self.source_type in ['point', 'area','road']:
-            self.load_join()
+            self.create_emission_table()
 
     def load_pointsource_canvas(self):
         self.source_type = 'point'
@@ -502,11 +507,6 @@ class EclairDock(QDockWidget):
         self.load_interactive()
 
     def load_join(self):
-        # create/update emission table to load joined layers
-        # TODO should only create emission table for self.source_type!
-        # in this way, doing all source types every time load_join is called.
-
-        self.create_emission()
         # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
@@ -533,9 +533,6 @@ class EclairDock(QDockWidget):
         else:
             message_box('Warning', f"Cannot load layer, sourcetype {source_type} unknown.")
 
-        # TODO this joined layer does not update automatically when tables are changed.
-        # should use the setup_watcher() ?
-
         # get the parameters for join by doing join through processing toolbox,
         # and using the lower button 'Advanced' > 'Copy as Python Command'
         parameters = { 'DISCARD_NONMATCHING' : False, 
@@ -559,13 +556,14 @@ class EclairDock(QDockWidget):
             'DISCARD_NONMATCHING':False,
             'PREFIX':'codeset1_',
             'OUTPUT':'TEMPORARY_OUTPUT'}
-
-            tmp_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
-
+            ac1_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
+            
+            parameters_codeset_join['INPUT'] = ac1_join
             parameters_codeset_join['PREFIX'] = 'codeset2_'
             parameters_codeset_join['FIELD'] = 'activitycode2_id'
-            tmp_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
+            ac2_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
 
+            parameters_codeset_join['INPUT'] = ac2_join
             parameters_codeset_join['PREFIX'] = 'codeset3_'
             parameters_codeset_join['FIELD'] = 'activitycode3_id'
             self.layer = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
@@ -1219,9 +1217,13 @@ class RunBackgroundTask(QgsTask):
                 f"Task {self.description()} completed\n",
                 MESSAGE_CATEGORY, Qgis.Success)
             message_box('Eclair',f"{self.description()} completed.")
+            #TODO would be more clear to implement this in EclairDock, after 
+            # setting self.task, but connect.finished did not work.
             if self.description() == "Rasterize emissions":
                 if self.parent.load_canvas:
                     load_rasters_to_canvas(self.parent.outputpath, self.parent.time_threshold)
+            elif self.description() == "Prepare emissions for static visualisation":
+                self.parent.load_join()
         else:
             if self.exception is None:
                 QgsMessageLog.logMessage(
