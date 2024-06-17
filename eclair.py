@@ -137,10 +137,6 @@ class EclairDock(QDockWidget):
         self.tab_widget = QTabWidget(self.main_widget)
         layout.addWidget(self.tab_widget)
 
-        # To automatically update database changes in visualized layer
-        # self.setup_watcher()
-        # watcher not necessary for point and area sources, reloaded from gpkg
-        # as soon as view of canvas changes (zoom etc)
         default_font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
         italic_font = default_font
         italic_font.setItalic(True)
@@ -175,10 +171,10 @@ class EclairDock(QDockWidget):
         layout_db.addWidget(btn_action_new_database)
         btn_action_new_database.clicked.connect(self.create_new_database_dialog)
 
-        btn_action_edit_db_settings = QPushButton("Edit database settings", self.tab_db)
-        btn_action_edit_db_settings.setFont(italic_font)
-        layout_db.addWidget(btn_action_edit_db_settings)
-        btn_action_edit_db_settings.clicked.connect(self.edit_db_settings)
+        # btn_action_edit_db_settings = QPushButton("Edit database settings", self.tab_db)
+        # btn_action_edit_db_settings.setFont(italic_font)
+        # layout_db.addWidget(btn_action_edit_db_settings)
+        # btn_action_edit_db_settings.clicked.connect(self.edit_db_settings)
 
         # Import
         layout_import = QVBoxLayout()
@@ -196,14 +192,14 @@ class EclairDock(QDockWidget):
         btn_action_import_sources.clicked.connect(self.import_sources)
 
         # Edit
-        layout_edit = QVBoxLayout()
-        layout_edit.setAlignment(Qt.AlignTop)
-        self.tab_edit.setLayout(layout_edit)
-        label = QLabel("Edit or remove data.", self.tab_edit)
-        layout_edit.addWidget(label)
-        btn_action_edit = QPushButton(" Edit data", self.tab_edit)
-        btn_action_edit.setFont(italic_font)
-        layout_edit.addWidget(btn_action_edit)
+        # layout_edit = QVBoxLayout()
+        # layout_edit.setAlignment(Qt.AlignTop)
+        # self.tab_edit.setLayout(layout_edit)
+        # label = QLabel("Edit or remove data.", self.tab_edit)
+        # layout_edit.addWidget(label)
+        # btn_action_edit = QPushButton(" Edit data", self.tab_edit)
+        # btn_action_edit.setFont(italic_font)
+        # layout_edit.addWidget(btn_action_edit)
 
         # Export
         layout_export = QVBoxLayout()
@@ -226,10 +222,6 @@ class EclairDock(QDockWidget):
         self.tab_calculate.setLayout(layout_calculate)
         label = QLabel("Create a Excel file with aggregated emissions per sector.", self.tab_calculate)
         layout_calculate.addWidget(label)
-
-        # btn_action_create_table = QPushButton(" Create table all pointsources and areasources, combining direct emissions and activities", self.tab_calculate)
-        # layout_calculate.addWidget(btn_action_create_table)
-        # btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
 
         btn_action_aggregate = QPushButton("Aggregate emissions", self.tab_calculate)
         layout_calculate.addWidget(btn_action_aggregate)
@@ -375,7 +367,7 @@ class EclairDock(QDockWidget):
                 message_box('Export error',f"Error: {error}")
     
 
-    def create_emission_table_dialog(self):
+    def create_emission_table(self):
         #TODO catch exception if database does not have any emissions imported yet       
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         try:
@@ -385,7 +377,6 @@ class EclairDock(QDockWidget):
             message_box('Eclair error',f"Error: {error}")
 
     def aggregate_emissions_dialog(self):
-        # self.create_emission_table_dialog()
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.xlsx)")
         if (filename == ''):
             # user cancelled
@@ -510,7 +501,7 @@ class EclairDock(QDockWidget):
         # TODO should only create emission table for self.source_type!
         # in this way, doing all source types every time load_join is called.
 
-        self.create_emission_table_dialog()
+        self.create_emission()
         # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
@@ -975,54 +966,39 @@ class RunImportTask(QgsTask):
             self.dry_run = False
         self.exception = None
 
+    def check_process_ready(self):
+        if self.proc:
+            return self.proc.poll() is not None
+        return False
+
     def run(self):
         """Implement heavy lifting.
-        Should periodically test for isCanceled() to gracefully abort.
+        Periodically test for isCanceled() to gracefully abort.
         Raising exceptions here will crash QGIS, raise them in self.finished instead.
         """
         QgsMessageLog.logMessage('Started import task', MESSAGE_CATEGORY, Qgis.Info)
         try:
             self.backup_path, self.proc = run_import(self.file_path, self.sheets, dry_run=self.dry_run)
-            # wait 3 seconds to make sure stdout/stderr created
-            wait_time = 3
-            result = subprocess.run(["python", "-c", f"from time import sleep ; sleep({wait_time})"], capture_output = True, text = True)
-            
-            output_path = os.path.dirname(os.environ.get("ETK_DATABASE_PATH"))
-            if self.dry_run:
-                stdout_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stdout.log'))
-                stderr_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stderr.log'))
-            else:
-                stdout_files = glob.glob(os.path.join(output_path, 'etk_import_*_stdout.log'))
-                stderr_files = glob.glob(os.path.join(output_path, 'etk_import_*_stderr.log'))
-            
-            # Read the latest stderr file
-            stderr_files.sort(key=lambda f: int(f.split('_')[-2]))
-            if stderr_files:
-                latest_stderr_file = stderr_files[-1]
-                for i in range(1200):
-                    # Check if the file size is greater than zero
-                    if os.path.getsize(latest_stderr_file) > 0: 
-                        with open(latest_stderr_file, 'r') as f:
-                            self.stderr_content = f.read()
-                            return True
-                    else:
-                        if self.isCanceled():
-                            if self.dry_run:
-                                self.exception = "Validation cancelled by user"
-                            else:
-                                self.exception = "Import cancelled by user"
-                            self.cancel()
-                            return False
-                        time.sleep(1)
-                        if i < 51:
-                            self.setProgress(i)
+            for i in range(1200):
+                # Check if the file size is greater than zero
+                if self.check_process_ready(): 
+                    return True
+                else:
+                    if self.isCanceled():
+                        if self.dry_run:
+                            self.exception = "Validation cancelled by user"
                         else:
-                            self.setProgress(50+i/1150.*50.)
-                        
-                self.exception = "Failed to import file within 20 minutes, decrease file size"
-                return False
-            else:
-                self.stderr_content = None
+                            self.exception = "Import cancelled by user"
+                        self.cancel()
+                        return False
+                    time.sleep(1)
+                    # set progress 1 % per second first 50 seconds
+                    # second half progress estimation based on max 20min import time.
+                    if i < 51:
+                        self.setProgress(i)
+                    else:
+                        self.setProgress(50+i/1150.*50.)
+            self.exception = "Failed to import file within 20 minutes, decrease file size"
         except Exception as e:
             self.exception =  e
             return False
@@ -1038,6 +1014,23 @@ class RunImportTask(QgsTask):
             QgsMessageLog.logMessage(
                 'Task "{name}" completed\n'.format(name=self.description()),
                 MESSAGE_CATEGORY, Qgis.Success)
+                    
+            output_path = os.path.dirname(os.environ.get("ETK_DATABASE_PATH"))
+            if self.dry_run:
+                stdout_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stdout.log'))
+                stderr_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stderr.log'))
+            else:
+                stdout_files = glob.glob(os.path.join(output_path, 'etk_import_*_stdout.log'))
+                stderr_files = glob.glob(os.path.join(output_path, 'etk_import_*_stderr.log'))
+            
+            # Read the latest stderr file
+            stderr_files.sort(key=lambda f: int(f.split('_')[-2]))
+            if stderr_files:
+                latest_stderr_file = stderr_files[-1]
+                with open(latest_stderr_file, 'r') as f:
+                    self.stderr_content = f.read()
+            else:
+                self.stderr_content = None
 
             validation_msgs = []
             updates = []
