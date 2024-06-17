@@ -1006,21 +1006,25 @@ class RunImportTask(QgsTask):
                             self.stderr_content = f.read()
                             return True
                     else:
+                        if self.isCanceled():
+                            if self.dry_run:
+                                self.exception = "Validation cancelled by user"
+                            else:
+                                self.exception = "Import cancelled by user"
+                            self.cancel()
+                            return False
                         time.sleep(1)
                         if i < 51:
                             self.setProgress(i)
                         else:
                             self.setProgress(50+i/1150.*50.)
+                        
                 self.exception = "Failed to import file within 20 minutes, decrease file size"
                 return False
             else:
                 self.stderr_content = None
         except Exception as e:
             self.exception =  e
-            return False
-
-        if self.isCanceled():
-            stopped(task, MESSAGE_CATEGORY)
             return False
         return True
         
@@ -1118,7 +1122,6 @@ class RunImportTask(QgsTask):
                     )
                 tableDialog.exec_()  
         else:
-            from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
             if self.exception is None:
                 QgsMessageLog.logMessage(
                     'Task "{name}" not successful but without '\
@@ -1136,7 +1139,10 @@ class RunImportTask(QgsTask):
                     +" choose an existing or create a new database first.")
                 else:
                     import_error = error.split('ImportError:')[-1]
-                    message_box('Import error',f"Error: {import_error}")
+                    if self.dry_run:
+                        message_box('Validation error',f"Error: {import_error}")
+                    else:
+                        message_box('Import error',f"Error: {import_error}")
 
 
     def cancel(self):
