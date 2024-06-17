@@ -63,7 +63,6 @@ from tempfile import gettempdir
 import sqlite3
 
 import processing
-# import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 if os.name != "nt":
@@ -100,7 +99,7 @@ class Eclair(QWidget):
         super(Eclair, self).__init__()
         self.iface = iface
         self.setWindowTitle("ECLAIR")
-        self.dock_widget = None  # Initialize the dock widget        
+        self.dock_widget = None  
 
     def initGui(self):
         self.action = QAction('Eclair!', self.iface.mainWindow())
@@ -130,9 +129,7 @@ class EclairDock(QDockWidget):
         # Create a main widget for the dock widget
         self.main_widget = QWidget(self)
         self.setWidget(self.main_widget)
-        # Set the minimum height for the dock widget
         self.setMinimumHeight(200) 
-        # Set the layout for the main widget
         layout = QVBoxLayout(self.main_widget)
         self.tab_widget = QTabWidget(self.main_widget)
         layout.addWidget(self.tab_widget)
@@ -150,7 +147,7 @@ class EclairDock(QDockWidget):
         # Add tabs to the tab widget
         self.tab_widget.addTab(self.tab_db, "DB Settings")
         self.tab_widget.addTab(self.tab_import, "Import")
-        self.tab_widget.addTab(self.tab_edit, "Edit")
+        # self.tab_widget.addTab(self.tab_edit, "Edit")
         self.tab_widget.addTab(self.tab_export, "Export")
         self.tab_widget.addTab(self.tab_calculate, "Analyse")
         self.tab_widget.addTab(self.tab_visualize, "Load Layers")
@@ -171,6 +168,7 @@ class EclairDock(QDockWidget):
         layout_db.addWidget(btn_action_new_database)
         btn_action_new_database.clicked.connect(self.create_new_database_dialog)
 
+        #TODO
         # btn_action_edit_db_settings = QPushButton("Edit database settings", self.tab_db)
         # btn_action_edit_db_settings.setFont(italic_font)
         # layout_db.addWidget(btn_action_edit_db_settings)
@@ -191,6 +189,7 @@ class EclairDock(QDockWidget):
         layout_import.addWidget(btn_action_import_sources)
         btn_action_import_sources.clicked.connect(self.import_sources)
 
+        #TODO
         # Edit
         # layout_edit = QVBoxLayout()
         # layout_edit.setAlignment(Qt.AlignTop)
@@ -211,10 +210,10 @@ class EclairDock(QDockWidget):
         layout_export.addWidget(btn_action_export_all)
         btn_action_export_all.clicked.connect(self.export_dialog)
 
-
-        btn_action_export = QPushButton(" Export only pointsources", self.tab_export)
-        btn_action_export.setFont(italic_font)
-        layout_export.addWidget(btn_action_export)
+        #TODO
+        # btn_action_export = QPushButton(" Export only pointsources", self.tab_export)
+        # btn_action_export.setFont(italic_font)
+        # layout_export.addWidget(btn_action_export)
 
         # Calculate emissions
         layout_calculate = QVBoxLayout()
@@ -359,12 +358,15 @@ class EclairDock(QDockWidget):
             # user cancelled
             message_box('Warning','No *.xlsx file chosen, emissions not exported.')
         else:
-            try:
-                (stdout, stderr) = run_export(filename)
-                message_box('Export emissions',"Successfully exported emissions.")
-            except CalledProcessError as e:
-                error = e.stderr.decode("utf-8")
-                message_box('Export error',f"Error: {error}")
+            if filename and not filename.endswith('.xlsx'):
+                filename += '.xlsx'
+            self.task = RunBackgroundTask(
+                description="Export data",
+                function=run_export,
+                parent=self,
+                filename=filename
+            )
+            QgsApplication.taskManager().addTask(self.task)
     
 
     def create_emission_table(self):
@@ -382,6 +384,8 @@ class EclairDock(QDockWidget):
             # user cancelled
             message_box('Warning','No file chosen, aggregated table not created.')
         else:
+            if filename and not filename.endswith('.xlsx'):
+                filename += '.xlsx'
             try:
                 self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
                 # Load codesets table
@@ -395,20 +399,25 @@ class EclairDock(QDockWidget):
                     codesetDialog.exec_()
                 else:
                     # aggregating all substances when no codeset defined
-                    (stdout, stderr) = run_aggregate_emissions(filename)
-                    message_box('Aggregate emissions',"Successfully aggregated emissions.")
+                    self.task = RunBackgroundTask(
+                        description="Aggregate emissions",
+                        function=run_aggregate_emissions,
+                        parent=self,
+                        filename=filename
+                    )
+                    QgsApplication.taskManager().addTask(self.task)
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 message_box('Aggregation error',f"Error: {error}")
     
     def rasterize_emissions_dialog(self):
-        outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files")
-        if (outputpath == ''):
+        self.outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files")
+        if (self.outputpath == ''):
             # user cancelled
             message_box('Rasterize error','No directory chosen, raster files not created.')
         else:
             # Get a list of files in the directory
-            files_in_directory = os.listdir(outputpath)
+            files_in_directory = os.listdir(self.outputpath)
             # Filter the list to include only NetCDF files
             netcdf_files = [file for file in files_in_directory if file.endswith(".nc")]
             if netcdf_files:
@@ -416,7 +425,7 @@ class EclairDock(QDockWidget):
                 + "New rasters will be named after the substances in the emission inventory "
                 + "(for example PM10.nc). Files cannot be overwritten, so if such files already exist, "
                 + "create a new output directory.")
-                outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files, where no emissions rasters exist yet.")
+                self.outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files, where no emissions rasters exist yet.")
             try:
                 rasterDialog = RasterizeDialog(self)
                 result = rasterDialog.exec_()  # Show the dialog as a modal dialog
@@ -424,45 +433,41 @@ class EclairDock(QDockWidget):
                     # user cancelled
                     message_box('Rasterize error',"No extent, srid and resolution defined, rasterization cancelled.")
                     return
-                load_canvas = rasterDialog.load_to_canvas
-                if load_canvas:
-                    time_threshold = time.time()
-
+                self.load_canvas = rasterDialog.load_to_canvas
+                if self.load_canvas:
+                    self.time_threshold = time.time()
                 if rasterDialog.date[0] != '':
                     begin = datetime.datetime.strptime(rasterDialog.date[0], "%Y-%m-%d")
                     end = datetime.datetime.strptime(rasterDialog.date[1], "%Y-%m-%d")
-                    (stdout, stderr) = run_rasterize_emissions(
-                        outputpath,
-                        rasterDialog.cell_size, 
+                    self.task = RunBackgroundTask(
+                        description="Rasterize emissions",
+                        function=run_rasterize_emissions,
+                        parent=self,
+                        outputpath=self.outputpath,
+                        cellsize=rasterDialog.cell_size, 
                         extent=rasterDialog.extent, 
                         srid=rasterDialog.raster_srid,
                         begin=begin,
                         end=end
                     )
+                    
                 else: 
-                    (stdout, stderr) = run_rasterize_emissions(
-                        outputpath, 
-                        rasterDialog.cell_size, 
+                    self.task = RunBackgroundTask(
+                        description="Rasterize emissions",
+                        function=run_rasterize_emissions,
+                        parent=self,
+                        outputpath=self.outputpath, 
+                        cellsize=rasterDialog.cell_size, 
                         extent=rasterDialog.extent, 
                         srid=rasterDialog.raster_srid
                     )
-                # TODO check if files are created, if not issue warning that sources may be outside of extent
-                message_box('Rasterize emissions',"Successfully rasterized emissions.")
-                if load_canvas:
-                    # Get a list of files in the directory
-                    files_in_directory = os.listdir(outputpath)
-                    # Filter the list to include only files modified after the time threshold
-                    modified_rasters = [
-                        file for file in files_in_directory 
-                        if (os.path.getmtime(os.path.join(outputpath, file)) > time_threshold)
-                        and file.endswith(".nc")
-                    ]
-                    # Check if there are any modified files
-                    if modified_rasters:
-                        load_rasters_to_canvas(outputpath,modified_rasters)
+                
+                QgsApplication.taskManager().addTask(self.task)
+
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 message_box('Rasterize error',f"Error: {error}")
+    
 
     def load_joined_pointsource_canvas(self):
         self.source_type = 'point'
@@ -852,16 +857,21 @@ class ChooseCodesetDialog(QDialog):
             btn_action = QPushButton(codeset_i)
             layout.addWidget(btn_action)
             btn_action.clicked.connect(lambda checked, cs=codeset_i: self.run_aggregation(cs))
-        
         self.setLayout(layout)
 
     @pyqtSlot()
     def run_aggregation(self,codeset):
         self.accept()
         try:
-            message_box('Aggregate emissions',"Aggregate for codeset "+str(codeset)+" starts after clicking OK.\n This may take some time, please wait.")
-            (stdout, stderr) = run_aggregate_emissions(self.filename,codeset=codeset)
-            message_box('Aggregate emissions',"Successfully aggregated emissions.")
+            message_box('Aggregate emissions',"Emission aggregation for codeset "+str(codeset)+" starts after clicking OK.\n")      
+            self.task = RunBackgroundTask(
+                description="Aggregate emissions",
+                function=run_aggregate_emissions,
+                parent=self,
+                filename=self.filename,
+                codeset=codeset
+            )
+            QgsApplication.taskManager().addTask(self.task)
         except CalledProcessError as e:
             error = e.stderr.decode("utf-8")
             message_box('Aggregation error',f"Error: {error}")
@@ -936,21 +946,31 @@ class TableDialog(QDialog):
         self.adjustSize()
 
 
-def load_rasters_to_canvas(directory_path, raster_files):
-    project = QgsProject.instance()
-    group_name = Path(directory_path).name
-    root = project.layerTreeRoot()
-    grp = root.addGroup(group_name)
-    
-    for raster_file in raster_files:
-        # Construct the full path to the raster file
-        full_path = os.path.join(directory_path, raster_file)
-        # Create a raster layer
-        raster_layer = QgsRasterLayer(full_path, raster_file, "gdal")
-        # Add the raster layer to the project
-        project.addMapLayer(raster_layer, False)
-        grp.insertChildNode(1, QgsLayerTreeLayer(raster_layer))
-        # grp.addLayer(layer=lay)
+def load_rasters_to_canvas(directory_path, time_threshold):
+    # Get a list of files in the directory
+    files_in_directory = os.listdir(directory_path)
+    # Filter the list to include only files modified after the time threshold
+    modified_rasters = [
+        file for file in files_in_directory 
+        if (os.path.getmtime(os.path.join(directory_path, file)) > time_threshold)
+        and file.endswith(".nc")
+    ]
+    # Check if there are any modified files
+    if modified_rasters:
+        project = QgsProject.instance()
+        group_name = Path(directory_path).name
+        root = project.layerTreeRoot()
+        grp = root.addGroup(group_name)
+        
+        for raster_file in modified_rasters:
+            # Construct the full path to the raster file
+            full_path = os.path.join(directory_path, raster_file)
+            # Create a raster layer
+            raster_layer = QgsRasterLayer(full_path, raster_file, "gdal")
+            # Add the raster layer to the project
+            project.addMapLayer(raster_layer, False)
+            grp.insertChildNode(1, QgsLayerTreeLayer(raster_layer))
+            # grp.addLayer(layer=lay)
 
 
 MESSAGE_CATEGORY = "Eclair info"
@@ -1140,11 +1160,84 @@ class RunImportTask(QgsTask):
 
     def cancel(self):
         QgsMessageLog.logMessage(
-            'Task "{name}" was canceled'.format(
-                name=self.description()),
+            f"Task {self.description()} was canceled",
             MESSAGE_CATEGORY, Qgis.Info)
         super().cancel()
 
 
 
 
+class RunBackgroundTask(QgsTask):
+    def __init__(self, description, function, parent, *args, **kwargs):
+        super().__init__(description, QgsTask.CanCancel)
+        self.function = function
+        self.parent = parent
+        self.args = args
+        self.kwargs = kwargs
+        self.exception = None
+        self.proc = None
+
+    def check_process_ready(self):
+        if self.proc:
+            return self.proc.poll() is not None
+        return False
+
+    def run(self):
+        """Implement heavy lifting.
+        Periodically test for isCanceled() to gracefully abort.
+        Raising exceptions here will crash QGIS, raise them in self.finished instead.
+        """
+        QgsMessageLog.logMessage(f"Started task {self.description()}", MESSAGE_CATEGORY, Qgis.Info)
+        try:
+            self.proc = self.function(*self.args, **self.kwargs)
+            for i in range(1200):
+                # Check if the process is ready
+                if self.check_process_ready(): 
+                    return True
+                else:
+                    if self.isCanceled():
+                        self.cancel()
+                        return False
+                    time.sleep(1)
+                    if i < 51:
+                        self.setProgress(i)
+                    else:
+                        self.setProgress(50+i/1150.*50.)
+            self.exception = f"Failed to complete {self.description()} within 20 minutes."
+        except Exception as e:
+            self.exception =  e
+            return False
+        return True
+
+    def finished(self, result):
+        """
+        This function is automatically called when the task has
+        completed (successfully or not). Result is the return value from self.run
+        """
+        if result:
+            QgsMessageLog.logMessage(
+                f"Task {self.description()} completed\n",
+                MESSAGE_CATEGORY, Qgis.Success)
+            message_box('Eclair',f"{self.description()} completed.")
+            if self.description() == "Rasterize emissions":
+                if self.parent.load_canvas:
+                    load_rasters_to_canvas(self.parent.outputpath, self.parent.time_threshold)
+        else:
+            if self.exception is None:
+                QgsMessageLog.logMessage(
+                    f"Task {self.description()} not successful but without "\
+                    'exception (probably the task was manually '\
+                    'canceled by the user)',
+                    MESSAGE_CATEGORY, Qgis.Warning)
+            else:
+                if isinstance(self.exception, str):
+                    error = self.exception
+                else:
+                    error = str(self.exception)
+                message_box('Eclair error', f"Error: {error}")
+
+    def cancel(self):
+        QgsMessageLog.logMessage(
+            f"Task {self.description()} was canceled",
+            MESSAGE_CATEGORY, Qgis.Info)
+        super().cancel()
