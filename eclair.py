@@ -43,6 +43,8 @@ from qgis.core import (
     QgsMessageLog,
     QgsLayerTreeLayer,
     Qgis, QgsApplication, QgsTask,
+    QgsSingleBandGrayRenderer,
+    QgsRasterBandStats
 )
 from qgis.gui import QgsProjectionSelectionDialog
 import time
@@ -58,9 +60,11 @@ import re
 from pathlib import Path
 import datetime
 import json
-from tempfile import gettempdir
+from tempfile import NamedTemporaryFile #gettempdir
+from osgeo import gdal
 
 import sqlite3
+import rasterio
 
 import processing
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -237,7 +241,7 @@ class EclairDock(QDockWidget):
         layout_visualize.setAlignment(Qt.AlignTop)
         self.tab_visualize.setLayout(layout_visualize)
 
-        label = QLabel("Load layers without emissions (dynamic)", self.tab_visualize)
+        label = QLabel("Load source geometries without emissions (dynamic)", self.tab_visualize)
         layout_visualize.addWidget(label)
 
         dynamic_sources_layout = QHBoxLayout()
@@ -252,7 +256,7 @@ class EclairDock(QDockWidget):
         btn_action_visualize_road.clicked.connect(self.load_roadsource_canvas)
         layout_visualize.addLayout(dynamic_sources_layout)
         
-        label = QLabel("Load sources with emissions (static)\n"
+        label = QLabel("Load source geometries with emissions (static)\n"
         "Layers have to be re-loaded each time the inventory is updated.", self.tab_visualize)
         layout_visualize.addWidget(label)
         
@@ -266,6 +270,9 @@ class EclairDock(QDockWidget):
         btn_action_visualize_join_road = QPushButton("Roads", self.tab_visualize)
         static_sources_layout.addWidget(btn_action_visualize_join_road)
         btn_action_visualize_join_road.clicked.connect(self.load_joined_roadsource_canvas)
+        btn_action_visualize_join_grid = QPushButton("Grids", self.tab_visualize)
+        static_sources_layout.addWidget(btn_action_visualize_join_grid)
+        btn_action_visualize_join_grid.clicked.connect(self.load_joined_gridsource_canvas)
         layout_visualize.addLayout(static_sources_layout)
 
     def update_db_label(self):
@@ -486,9 +493,31 @@ class EclairDock(QDockWidget):
         self.source_type = 'road'
         self.create_emission_table()
 
+
+    def load_joined_gridsource_canvas(self):
+        try:
+            self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+            # Query raster names
+            connection = sqlite3.connect(self.db_path)
+            cursor = connection.cursor()
+            cursor.execute("SELECT raster FROM edb_gridsourcesubstance")
+            gridsourcesubstance_rasters = [row[0] for row in cursor.fetchall()]
+            cursor.execute("SELECT raster FROM edb_gridsourceactivity")
+            gridsourceactivity_rasters = [row[0] for row in cursor.fetchall()]
+            connection.close()
+            for raster in gridsourcesubstance_rasters:
+                raster_layer = QgsRasterLayer(f'GPKG:{self.db_path}:raster_{raster}',raster)
+                if not raster_layer.isValid():
+                    raise Exception(str(raster_layer.error()))
+                QgsProject.instance().addMapLayer(raster_layer)
+        except CalledProcessError as e:
+            error = e.stderr.decode("utf-8")
+            message_box('Load layers error',f"Error: {error}")
+
     def load_joined_sources_canvas(self):
         for self.source_type in ['point', 'area','road']:
             self.create_emission_table()
+
 
     def load_pointsource_canvas(self):
         self.source_type = 'point'
@@ -965,10 +994,15 @@ def load_rasters_to_canvas(directory_path, time_threshold):
             full_path = os.path.join(directory_path, raster_file)
             # Create a raster layer
             raster_layer = QgsRasterLayer(full_path, raster_file, "gdal")
-            # Add the raster layer to the project
-            project.addMapLayer(raster_layer, False)
-            grp.insertChildNode(1, QgsLayerTreeLayer(raster_layer))
-            # grp.addLayer(layer=lay)
+            # statistics band 1
+            provider = raster_layer.dataProvider()
+            stats = provider.bandStatistics(1, QgsRasterBandStats.All)
+            # only visualize non-zero rasters:
+            if stats.sum > 0:
+                # Add the raster layer to the project
+                project.addMapLayer(raster_layer, False)
+                grp.insertChildNode(1, QgsLayerTreeLayer(raster_layer))
+
 
 
 MESSAGE_CATEGORY = "Eclair info"
@@ -1243,3 +1277,4 @@ class RunBackgroundTask(QgsTask):
             f"Task {self.description()} was canceled",
             MESSAGE_CATEGORY, Qgis.Info)
         super().cancel()
+
