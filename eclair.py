@@ -60,7 +60,7 @@ import re
 from pathlib import Path
 import datetime
 import json
-from tempfile import NamedTemporaryFile #gettempdir
+from tempfile import NamedTemporaryFile, gettempdir
 from osgeo import gdal
 
 import sqlite3
@@ -500,16 +500,59 @@ class EclairDock(QDockWidget):
             # Query raster names
             connection = sqlite3.connect(self.db_path)
             cursor = connection.cursor()
-            cursor.execute("SELECT raster FROM edb_gridsourcesubstance")
-            gridsourcesubstance_rasters = [row[0] for row in cursor.fetchall()]
-            cursor.execute("SELECT raster FROM edb_gridsourceactivity")
-            gridsourceactivity_rasters = [row[0] for row in cursor.fetchall()]
+            cursor.execute("SELECT id, name FROM edb_gridsource")
+            source_id, source_name = zip(*[(x[0], x[1]) for x in cursor.fetchall()])
+            cursor.execute("SELECT source_id, raster FROM edb_gridsourcesubstance")
+            gss_source_id, gridsourcesubstance_rasters = zip(*[(x[0], x[1]) for x in cursor.fetchall()])
+            cursor.execute("SELECT source_id, raster FROM edb_gridsourceactivity")
+            gsa_source_id, gridsourceactivity_rasters = zip(*[(x[0], x[1]) for x in cursor.fetchall()])
             connection.close()
-            for raster in gridsourcesubstance_rasters:
-                raster_layer = QgsRasterLayer(f'GPKG:{self.db_path}:raster_{raster}',raster)
-                if not raster_layer.isValid():
-                    raise Exception(str(raster_layer.error()))
-                QgsProject.instance().addMapLayer(raster_layer)
+            # mkdir os.path.join(gettempdir(),dbname)
+            for id in source_id:
+                # look if any gss and gsa defined
+                # get max extent and min cellsize for all rasters
+                # rasterize filtered on source id
+                # store rasters in tmp and visualize, use existing function load to raster, and check that zero raster not visualized
+                positions = [i for i, x in enumerate(gss_source_id) if x == id]
+                gss_rasters = [gridsourcesubstance_rasters[i] for i in positions]
+                positions = [i for i, x in enumerate(gsa_source_id) if x == id]
+                gsa_rasters = [gridsourceactivity_rasters[i] for i in positions]
+                unique_rasters = set(gss_rasters + gsa_rasters)
+                extent=[]
+                cellsize=[]
+                for raster in unique_rasters:
+                    raster_layer = QgsRasterLayer(f'GPKG:{self.db_path}:raster_{raster}',raster)
+                    raster_extent = (
+                        raster_layer.dataProvider().extent().xMinimum(),
+                        raster_layer.dataProvider().extent().yMinimum(),
+                        raster_layer.dataProvider().extent().xMaximum(),
+                        raster_layer.dataProvider().extent().yMaximum()
+                    )
+                    extent.append(raster_extent)
+                    cellsize.append((raster_extent[2]-raster_extent[0])/raster_layer.dataProvider().xSize())
+
+                min_cellsize = min(cellsize)
+                result_extent = (
+                    min(t[0] for t in extent), 
+                    min(t[1] for t in extent), 
+                    max(t[2] for t in extent), 
+                    max(t[3] for t in extent)
+                )
+                # run rasterize given sourcetypes grid, cellsize, extent, srid and tmpdir/dbname
+                # then load nonzero resulting rasters to canvas 
+                # load as group with dbname-GridSource-datetime/gridsourcename_substance
+                from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
+
+
+            # # plain visualization of rasters
+            # for raster in gridsourcesubstance_rasters:
+            #     raster_layer = QgsRasterLayer(f'GPKG:{self.db_path}:raster_{raster}',raster)
+            #     if not raster_layer.isValid():
+            #         raise Exception(str(raster_layer.error()))
+            #     QgsProject.instance().addMapLayer(raster_layer)
+
+
+
         except CalledProcessError as e:
             error = e.stderr.decode("utf-8")
             message_box('Load layers error',f"Error: {error}")
