@@ -496,8 +496,11 @@ class EclairDock(QDockWidget):
 
     def load_joined_gridsource_canvas(self):
         try:
-            self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
-            # Query raster names
+            self.db_path = os.environ.get("ETK_DATABASE_PATH", None)
+            if self.db_path is None:
+                message_box('Load GridSource error','Database not set yet, connect to '
+                + ' an existing database or create a new one.')
+                return
             connection = sqlite3.connect(self.db_path)
             cursor = connection.cursor()
             cursor.execute("SELECT id, name FROM edb_gridsource")
@@ -507,12 +510,14 @@ class EclairDock(QDockWidget):
             cursor.execute("SELECT source_id, raster FROM edb_gridsourceactivity")
             gsa_source_id, gridsourceactivity_rasters = zip(*[(x[0], x[1]) for x in cursor.fetchall()])
             connection.close()
-            # mkdir os.path.join(gettempdir(),dbname)
-            for id in source_id:
-                # look if any gss and gsa defined
-                # get max extent and min cellsize for all rasters
-                # rasterize filtered on source id
-                # store rasters in tmp and visualize, use existing function load to raster, and check that zero raster not visualized
+            dbname = os.path.basename(self.db_path).split('.')[0]
+            output_path = os.path.join(gettempdir(),dbname)
+            if not os.path.exists(output_path):
+                os.mkdir(output_path)
+            self.load_canvas = True
+            message_box('Load layers error',f"id {source_id} name {source_name}")
+            self.time_threshold = time.time()
+            for id, name in zip(source_id, source_name):
                 positions = [i for i, x in enumerate(gss_source_id) if x == id]
                 gss_rasters = [gridsourcesubstance_rasters[i] for i in positions]
                 positions = [i for i, x in enumerate(gsa_source_id) if x == id]
@@ -520,6 +525,7 @@ class EclairDock(QDockWidget):
                 unique_rasters = set(gss_rasters + gsa_rasters)
                 extent=[]
                 cellsize=[]
+                srid=[]
                 for raster in unique_rasters:
                     raster_layer = QgsRasterLayer(f'GPKG:{self.db_path}:raster_{raster}',raster)
                     raster_extent = (
@@ -530,7 +536,12 @@ class EclairDock(QDockWidget):
                     )
                     extent.append(raster_extent)
                     cellsize.append((raster_extent[2]-raster_extent[0])/raster_layer.dataProvider().xSize())
-
+                    srid.append(raster_layer.crs().postgisSrid())
+                srid=set(srid)
+                if len(srid) != 1:
+                    message_box('Load layers error',f"Cannot load grids with undefined or multiple srid for gridsource {name}")
+                else:
+                    srid = srid.pop()
                 min_cellsize = min(cellsize)
                 result_extent = (
                     min(t[0] for t in extent), 
@@ -538,20 +549,26 @@ class EclairDock(QDockWidget):
                     max(t[2] for t in extent), 
                     max(t[3] for t in extent)
                 )
-                # run rasterize given sourcetypes grid, cellsize, extent, srid and tmpdir/dbname
-                # then load nonzero resulting rasters to canvas 
-                # load as group with dbname-GridSource-datetime/gridsourcename_substance
-                from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
-
-
-            # # plain visualization of rasters
-            # for raster in gridsourcesubstance_rasters:
-            #     raster_layer = QgsRasterLayer(f'GPKG:{self.db_path}:raster_{raster}',raster)
-            #     if not raster_layer.isValid():
-            #         raise Exception(str(raster_layer.error()))
-            #     QgsProject.instance().addMapLayer(raster_layer)
-
-
+                self.outputpath = os.path.join(gettempdir(),dbname,name)
+                if not os.path.exists(self.outputpath):
+                    os.mkdir(self.outputpath)
+                else:
+                    old_rasters = os.listdir(self.outputpath)
+                    for file in old_rasters:
+                        os.remove(os.path.join(self.outputpath,file))
+                # simultaneously running background tasks cannot have the same 
+                # variable name (eg self.task)
+                setattr(self, f'task_{name}', RunBackgroundTask(
+                    description=f"Rasterize emissions {name}",
+                    function=run_rasterize_emissions,
+                    parent=self,
+                    outputpath=self.outputpath, 
+                    cellsize=min_cellsize, 
+                    extent=result_extent, 
+                    srid=srid,
+                    grid_ids=id
+                ))
+                QgsApplication.taskManager().addTask(getattr(self,f'task_{name}'))
 
         except CalledProcessError as e:
             error = e.stderr.decode("utf-8")
@@ -579,7 +596,6 @@ class EclairDock(QDockWidget):
         self.load_interactive()
 
     def load_join(self):
-        # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
@@ -605,7 +621,7 @@ class EclairDock(QDockWidget):
         else:
             message_box('Warning', f"Cannot load layer, sourcetype {source_type} unknown.")
 
-        # get the parameters for join by doing join through processing toolbox,
+        # Create parameters for join by doing join through processing toolbox,
         # and using the lower button 'Advanced' > 'Copy as Python Command'
         parameters = { 'DISCARD_NONMATCHING' : False, 
         'FIELD' : 'id', # id in table for join
@@ -646,7 +662,6 @@ class EclairDock(QDockWidget):
 
 
     def load_interactive(self):
-        # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
@@ -682,9 +697,7 @@ class EclairDock(QDockWidget):
         crs_dialog = QgsProjectionSelectionDialog()
         crs_dialog.setWindowTitle("Select default coordinate system for your database")
         if crs_dialog.exec_():
-            # Get the selected CRS
             crs = crs_dialog.crs()
-            # Get the EPSG code
             epsg_code = crs.authid().split(":")[-1]
             return epsg_code
         else:
@@ -699,7 +712,6 @@ def show_help(self):
 
 
 def message_box(title,text):
-    # For this example, let's display the file contents in a message box.
     msg_box = QMessageBox()
     msg_box.setWindowTitle(title)
     msg_box.setText(text)
@@ -723,15 +735,14 @@ class CheckboxDialog(QDialog):
             self.setWindowTitle("Import data")
         layout.addWidget(label)
 
-        # Create checkboxes for each element in the list
+        # Create checkboxes for each element in box_labels
         self.checkboxes = {}
         for label in self.box_labels:
             checkbox = QCheckBox(label)
-            checkbox.setChecked(True)  # Set initial state
+            checkbox.setChecked(True)  
             layout.addWidget(checkbox)
             self.checkboxes[label] = checkbox
 
-        # Set the layout for the dialog
         self.setLayout(layout)
 
         if self.dry_run:
@@ -742,9 +753,8 @@ class CheckboxDialog(QDialog):
         btn_action_import_sheets.clicked.connect(self.import_sheets_dialog)
 
     def import_sheets_dialog(self):
-        # Store the state of the checkboxes
+        # Store the state of the checkboxes and close dialog
         self.sheet_names = [label for label in self.box_labels if self.checkboxes[label].isChecked()]
-        # close the checkbox dialog
         self.accept()
 
 class RasterizeDialog(QDialog):
@@ -763,11 +773,9 @@ class RasterizeDialog(QDialog):
         +"Raster extent and resolution have to be provided in meters, not degrees (a raster with EPSG 4326 is not possible).")
         layout.addWidget(label)
 
-        # Add QLineEdit for user to input a number
         srid_label = QLabel("Enter a coordinate system (EPSG, 4-5 integers):")
         layout.addWidget(srid_label)
         self.srid_input = QLineEdit(self)
-        # text inside box self.srid_input.setPlaceholderText("SRID")
         self.srid_input.setInputMask("99999")  # Max 5 integers
         self.srid_input.setMaximumWidth(150)
         # Initialize with current canvas CRS
@@ -780,21 +788,17 @@ class RasterizeDialog(QDialog):
             self.srid_input.setText(str(default_epsg))
         layout.addWidget(self.srid_input)
 
-        # Add QLineEdit for user to input a number
-        # TODO would be nice to allow 'current canvas extent', or 'smallest extent to cover all sources'? 
+        # TODO would be nice to have option 'smallest extent to cover all sources'
         extent_label = QLabel("Enter x and y coordinates for lower left (x1, y1) and upper right (x2, y2) corners of output extent:")
         layout.addWidget(extent_label)
-        # Horizontal box for extent
         extent_layout = QHBoxLayout()
         self.extent_input = {}
         self.extent_labels = ["x1:", "y1:", "x2:" ,"y2:"]
         current_extent = iface.mapCanvas().extent()
         if canvas_epsg == 4326:
-            # convert from degrees to default_epsg
+            # convert from degrees to default_epsg, raster coordinates have to be metric
             target_crs = QgsCoordinateReferenceSystem(default_epsg)
-            # Create a coordinate transform object
             transform = QgsCoordinateTransform(canvas_crs, target_crs, QgsProject.instance())
-            # Transform the extent to the target CRS
             current_extent = transform.transform(current_extent)
 
         current_corners = {"x1:":floor(current_extent.xMinimum()/1000)*1000,
@@ -806,7 +810,7 @@ class RasterizeDialog(QDialog):
             label = QLabel(label_text)
             extent_layout.addWidget(label)
             line_edit = QLineEdit(self)
-            line_edit.setValidator(QDoubleValidator())   # Set input mask for floats
+            line_edit.setValidator(QDoubleValidator())   
             line_edit.setText(str(current_corners[label_text]))
             extent_layout.addWidget(line_edit)
             self.extent_input[label_text] = line_edit
@@ -815,11 +819,9 @@ class RasterizeDialog(QDialog):
 
         resolution_label = QLabel("Enter the desired resolution of the output extent, in meters:")
         layout.addWidget(resolution_label)
-        # Horizontal box for resolution
         resolution_layout = QHBoxLayout()
         self.resolution_input = {}
         self.resolution_labels = ["resolution [m]"]
-        # leaving the for-loop in case want to go back to x and y resolution
         for label_text in self.resolution_labels:
             label = QLabel(label_text)
             resolution_layout.addWidget(label)
@@ -830,10 +832,8 @@ class RasterizeDialog(QDialog):
             self.resolution_input[label_text] = line_edit
         layout.addLayout(resolution_layout)
 
-        # Horizontal box for date
         date_label = QLabel("If one raster per hour is desired, enter begin and end date for rasters (optional).")
         # TODO etk now always assumes timezone UTC, is that desired? may be difficult to communicate different timezone
-        # could give option; local balkan timezone or utc?
         layout.addWidget(date_label)
         date_layout = QHBoxLayout()
         self.date_input = {}
@@ -850,8 +850,6 @@ class RasterizeDialog(QDialog):
         self.checkbox = QCheckBox("Load rasters to canvas after creation.")
         self.checkbox.setChecked(True)  # Set initial state
         layout.addWidget(self.checkbox)
-
-        # Set the layout for the dialog
         self.setLayout(layout)
 
         # TODO let unit be user defined?
@@ -1088,7 +1086,7 @@ class RunImportTask(QgsTask):
                         return False
                     time.sleep(1)
                     # set progress 1 % per second first 50 seconds
-                    # second half progress estimation based on max 20min import time.
+                    # second half progress estimation based on max 20min 
                     if i < 51:
                         self.setProgress(i)
                     else:
@@ -1291,14 +1289,13 @@ class RunBackgroundTask(QgsTask):
         """
         if result:
             QgsMessageLog.logMessage(
-                f"Task {self.description()} completed\n",
+                f"Task {self.description()} completed",
                 MESSAGE_CATEGORY, Qgis.Success)
-            message_box('Eclair',f"{self.description()} completed.")
             #TODO would be more clear to implement this in EclairDock, after 
             # setting self.task, but connect.finished did not work.
-            if self.description() == "Rasterize emissions":
+            if "Rasterize emissions" in self.description():
                 if self.parent.load_canvas:
-                    load_rasters_to_canvas(self.parent.outputpath, self.parent.time_threshold)
+                    load_rasters_to_canvas(self.kwargs["outputpath"], self.parent.time_threshold)
             elif self.description() == "Prepare emissions for static visualisation":
                 self.parent.load_join()
         else:
