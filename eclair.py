@@ -504,72 +504,84 @@ class EclairDock(QDockWidget):
             connection = sqlite3.connect(self.db_path)
             cursor = connection.cursor()
             cursor.execute("SELECT id, name FROM edb_gridsource")
-            source_id, source_name = zip(*[(x[0], x[1]) for x in cursor.fetchall()])
-            cursor.execute("SELECT source_id, raster FROM edb_gridsourcesubstance")
-            gss_source_id, gridsourcesubstance_rasters = zip(*[(x[0], x[1]) for x in cursor.fetchall()])
-            cursor.execute("SELECT source_id, raster FROM edb_gridsourceactivity")
-            gsa_source_id, gridsourceactivity_rasters = zip(*[(x[0], x[1]) for x in cursor.fetchall()])
-            connection.close()
-            dbname = os.path.basename(self.db_path).split('.')[0]
-            output_path = os.path.join(gettempdir(),dbname)
-            if not os.path.exists(output_path):
-                os.mkdir(output_path)
-            self.load_canvas = True
-            message_box('Load layers error',f"id {source_id} name {source_name}")
-            self.time_threshold = time.time()
-            for id, name in zip(source_id, source_name):
-                positions = [i for i, x in enumerate(gss_source_id) if x == id]
-                gss_rasters = [gridsourcesubstance_rasters[i] for i in positions]
-                positions = [i for i, x in enumerate(gsa_source_id) if x == id]
-                gsa_rasters = [gridsourceactivity_rasters[i] for i in positions]
-                unique_rasters = set(gss_rasters + gsa_rasters)
-                extent=[]
-                cellsize=[]
-                srid=[]
-                for raster in unique_rasters:
-                    raster_layer = QgsRasterLayer(f'GPKG:{self.db_path}:raster_{raster}',raster)
-                    raster_extent = (
-                        raster_layer.dataProvider().extent().xMinimum(),
-                        raster_layer.dataProvider().extent().yMinimum(),
-                        raster_layer.dataProvider().extent().xMaximum(),
-                        raster_layer.dataProvider().extent().yMaximum()
+            result = cursor.fetchall()
+            if len(result) > 0:
+                timestamp = datetime.datetime.now().strftime("%m-%d-%Y_%H:%M")
+                source_id, source_name = zip(*[(x[0], x[1]) for x in result])
+                cursor.execute("SELECT source_id, raster FROM edb_gridsourcesubstance")
+                result = cursor.fetchall()
+                if len(result) > 0:
+                    gss_source_id, gridsourcesubstance_rasters = zip(*[(x[0], x[1]) for x in result])
+                else:
+                    gss_source_id, gridsourcesubstance_rasters = [], []
+                cursor.execute("SELECT source_id, raster FROM edb_gridsourceactivity")
+                result = cursor.fetchall()
+                if len(result) > 0:
+                    gsa_source_id, gridsourceactivity_rasters = zip(*[(x[0], x[1]) for x in result])
+                else:
+                    gsa_source_id, gridsourceactivity_rasters = [], []
+                connection.close()
+                dbname = os.path.basename(self.db_path).split('.')[0]
+                output_path = os.path.join(gettempdir(),dbname)
+                if not os.path.exists(output_path):
+                    os.mkdir(output_path)
+                self.load_canvas = True
+                self.time_threshold = time.time()
+                for id, name in zip(source_id, source_name):
+                    positions = [i for i, x in enumerate(gss_source_id) if x == id]
+                    gss_rasters = [gridsourcesubstance_rasters[i] for i in positions]
+                    positions = [i for i, x in enumerate(gsa_source_id) if x == id]
+                    gsa_rasters = [gridsourceactivity_rasters[i] for i in positions]
+                    unique_rasters = set(gss_rasters + gsa_rasters)
+                    extent=[]
+                    cellsize=[]
+                    srid=[]
+                    for raster in unique_rasters:
+                        raster_layer = QgsRasterLayer(f'GPKG:{self.db_path}:raster_{raster}',raster)
+                        raster_extent = (
+                            raster_layer.dataProvider().extent().xMinimum(),
+                            raster_layer.dataProvider().extent().yMinimum(),
+                            raster_layer.dataProvider().extent().xMaximum(),
+                            raster_layer.dataProvider().extent().yMaximum()
+                        )
+                        extent.append(raster_extent)
+                        cellsize.append((raster_extent[2]-raster_extent[0])/raster_layer.dataProvider().xSize())
+                        srid.append(raster_layer.crs().postgisSrid())
+                    srid=set(srid)
+                    if len(srid) != 1:
+                        message_box('Load layers error',f"Cannot load grids with undefined or multiple srid for gridsource {name}")
+                    else:
+                        srid = srid.pop()
+                    min_cellsize = min(cellsize)
+                    result_extent = (
+                        min(t[0] for t in extent), 
+                        min(t[1] for t in extent), 
+                        max(t[2] for t in extent), 
+                        max(t[3] for t in extent)
                     )
-                    extent.append(raster_extent)
-                    cellsize.append((raster_extent[2]-raster_extent[0])/raster_layer.dataProvider().xSize())
-                    srid.append(raster_layer.crs().postgisSrid())
-                srid=set(srid)
-                if len(srid) != 1:
-                    message_box('Load layers error',f"Cannot load grids with undefined or multiple srid for gridsource {name}")
-                else:
-                    srid = srid.pop()
-                min_cellsize = min(cellsize)
-                result_extent = (
-                    min(t[0] for t in extent), 
-                    min(t[1] for t in extent), 
-                    max(t[2] for t in extent), 
-                    max(t[3] for t in extent)
-                )
-                self.outputpath = os.path.join(gettempdir(),dbname,name)
-                if not os.path.exists(self.outputpath):
-                    os.mkdir(self.outputpath)
-                else:
-                    old_rasters = os.listdir(self.outputpath)
-                    for file in old_rasters:
-                        os.remove(os.path.join(self.outputpath,file))
-                # simultaneously running background tasks cannot have the same 
-                # variable name (eg self.task)
-                setattr(self, f'task_{name}', RunBackgroundTask(
-                    description=f"Rasterize emissions {name}",
-                    function=run_rasterize_emissions,
-                    parent=self,
-                    outputpath=self.outputpath, 
-                    cellsize=min_cellsize, 
-                    extent=result_extent, 
-                    srid=srid,
-                    grid_ids=id
-                ))
-                QgsApplication.taskManager().addTask(getattr(self,f'task_{name}'))
-
+                    self.outputpath = os.path.join(gettempdir(),dbname+'-'+name+'-'+timestamp)
+                    if not os.path.exists(self.outputpath):
+                        os.mkdir(self.outputpath)
+                    else:
+                        old_rasters = os.listdir(self.outputpath)
+                        for file in old_rasters:
+                            os.remove(os.path.join(self.outputpath,file))
+                    # simultaneously running background tasks cannot have the same 
+                    # variable name (eg self.task)
+                    # message_box("rasterize task",f"cell size {min_cellsize}, extent {extent}, srid {srid}, grid_ids {id}")
+                    setattr(self, f'task_{name}', RunBackgroundTask(
+                        description=f"Rasterize emissions {name}",
+                        function=run_rasterize_emissions,
+                        parent=self,
+                        outputpath=self.outputpath, 
+                        cellsize=min_cellsize, 
+                        extent=result_extent, 
+                        srid=srid,
+                        grid_ids=id
+                    ))
+                    QgsApplication.taskManager().addTask(getattr(self,f'task_{name}'))
+            else:
+                message_box("Load layers info","No gridsources exist in database.")
         except CalledProcessError as e:
             error = e.stderr.decode("utf-8")
             message_box('Load layers error',f"Error: {error}")
@@ -1109,12 +1121,8 @@ class RunImportTask(QgsTask):
                 MESSAGE_CATEGORY, Qgis.Success)
                     
             output_path = os.path.dirname(os.environ.get("ETK_DATABASE_PATH"))
-            if self.dry_run:
-                stdout_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stdout.log'))
-                stderr_files = glob.glob(os.path.join(os.path.dirname(self.backup_path), 'etk_import_*_stderr.log'))
-            else:
-                stdout_files = glob.glob(os.path.join(output_path, 'etk_import_*_stdout.log'))
-                stderr_files = glob.glob(os.path.join(output_path, 'etk_import_*_stderr.log'))
+            stdout_files = glob.glob(os.path.join(gettempdir(), 'etk_import_*_stdout.log'))
+            stderr_files = glob.glob(os.path.join(gettempdir(), 'etk_import_*_stderr.log'))
             
             # Read the latest stderr file
             stderr_files.sort(key=lambda f: int(f.split('_')[-2]))
