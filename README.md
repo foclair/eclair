@@ -58,36 +58,51 @@ Eclair can either be installed from zip (easier for user not involved in develop
 Now Eclair is installed, and a button with 'Eclair!' should have appeared in QGIS. Clicking this button should open a panel below the 'layers' panel, on the left of the user interface.
 
 ### Using Eclair
-Eclair has several sheets, each of which are described below. 
-For all sheets, the functions of buttons that are in *italic* are not yet implemented. 
+Eclair has several panels, each of which are described below. 
 Eclair often opens windows to report on the processing status. These windows have to be closed before being able to continue using the QGIS interface.
 
-Currently, point- and areasources are implemented in etk, and gridsources are added very soon. 
 Sources can either have direct emissions, where the emission of each substance is known for a source.
-If the amount of emissions is not known, but the activity of the source is known (for example the energy demand for heating), an activity rate and emission factors can be imported to specify emissions.
+If the amount of emissions is not known, but the activity of the source is known (for example the energy demand for heating), an activity rate and emission factors can be imported to estimate emissions.
 
 #### DB Settings
 Here you choose which database to edit. Every time the plugin is started, a database has to be chosen or created.
 When creating a new database, it is now **obligatory** to give a name ending in ".gpkg" (this will likely change in next update).
 If you receive an error message stating "ModuleNotFoundError: No module named 'etk'", make sure that you opened the version of QGIS connected to your OSGeo4W installation (as QGIS could be installed twice, once as stand-alone and once as part of OSGeo4W). The executable of the program connected to OSGeo4W can be found in `OSGeo4W/bin/qgis-ltr-bin`. Always use this version of QGIS when working with Eclair. 
 
-#### Import
+#### Import emissions
+**TODO decide where to store templates for users**
+
+Eclair can import four types of sources:
+- point sources,
+- area sources,
+- grid sources,
+- road sources.
+
 Template files that show what structure import files should have are located in 
 ```
 /data/proj9/A-konsult/Västra_Balkan_luftmiljö_2022_2270_10.3/06_Underlag/ETK_Templates
 ```
+The import files are Excel files which can have a number of sheets. 
+Codesets (such as GNFR, NFR and SNAP) and their activity codes (such as 1.A.3.b) are set in sheets
+"CodeSet" and "ActivityCode". These apply to all source types.
+The parameters used for point, area and grid sources are set by sheets "EmissionFactor", 
+"Timevar", "PointSource", "AreaSource" and "GridSource".
+The parameters used to estimate emissions from traffic are set by the sheets
+"VehicleFuel", "Fleet", "CongestionProfile", "FlowTimevar", "ColdstartTimevar",
+"RoadAttribute", "TrafficSituation", "VehicleEmissionFactor" and "RoadSource".
+
 It is recommended to first validate your file, before importing it. 
-Validating your input file means that Eclair will try to import it, but keeps track of all errors if the import file misses data.
-If you try to directly import an input file that has missing data, you will only get 1 error for each missing cell in the file, and the import routine will be aborted. However, if you are sure that your input file has the correct format, you can import it directly without validation. 
+Validating your input file means that Eclair will try to import it, but keeping track of all errors if the import file misses data.
+If you try to directly import an input file that has an incorrect format, you will only get the first error in the file, and the import routine will be aborted. However, if you are sure that your input file has the correct format, you can import it directly without validation. 
 For both import and validation, you can choose which sheets of the file you want to process. 
-Note that if you want to import activities or activity codes for sources, these activities or activity codes have to either be defined in a previous import, or in the same file. It is not possible to import sources which specify rates for activities that are not defined yet.
 
-Required columns for areasources are: facility_id, facility_name, source_name, geometry and timevar, where the geometry of the polygons is in WKT format (see template). Required columns for pointsources are: facility_id, facility_name, source_name, lat and lon. 
-Optional columns for pointsources are: timevar, chimney_height, outer_diameter (of chimney), inner_diameter, gas_speed, gas_temperature[K], house_width and house_height. All physical parameters should be specified in SI units (m, m/s and K). 
+If you want to import activities or activity codes for sources, these activities or activity codes have to either be defined in a previous import, or in the same file. It is not possible to import sources which specify rates for activities that are not defined yet. Activity codes have to be unique; one code cannot be used for multiple codesets.
 
-Each source should have a unique combination of source_name and facility_id. The same facility_id cannot be used for different facility names. If you import a source which has a name and facility_id that already exist in the database, this source will not be **duplicated** but its parameters will be **updated**.
+Almost all columns in the import template are required, but point sources have a few optional columns: `timevar`, `chimney_height`, `outer_diameter` (of chimney), `inner_diameter`, `gas_speed`, `gas_temperature[K]`, `house_width` and `house_height`. These physical parameters have to be specified in SI units (m, m/s and K). 
 
-Direct emissions for a substance are specified by create a column 'subst:PM10', where PM10 is taken as an example. The implemented substances are: 
+Each point and area source needs to have a unique combination of `source_name` and `facility_id`. The same `facility_id` cannot be used for different `facility_name`s. If you import a point or area source which has a `source_name` and `facility_id` that already exist in the database, this source will not be **duplicated** but its parameters will be **updated**. Grid sources have a unique `source_name`; importing a file with a grid source name that already exists in the database will update the source, not duplicate it. Road sources on the other hand are **not** updated; importing the same import file twice will lead to duplicated road segments in the database. 
+
+Direct emissions for a substance are specified by create a column `subst:PM10`, where the substance 'PM10' is taken as an example. The unit of direct emissions is set by `emission_unit`. The substances implemented in Eclair are: 
 
 | abbreviation | name substance |
 | :-- | :-- |
@@ -131,30 +146,29 @@ Direct emissions for a substance are specified by create a column 'subst:PM10', 
 | TSP | Total Suspended Particles |
 | Zn | Zinc |
 
+Indirect emissions, specified by an activity, activity rate and emission factors, are added by a column `act:activity_name` (see templates for example).
+For grid sources, the columns `subst:` and `act:` can either contain a number, which will then scale the raster values such that the total direct emission or activity rate for the entire raster is equal to this number, or the word `sum` such that the raster values remain unscaled. 
 
+#### Export emissions
+Exports all data currently stored in the database to an Excel file which has the correct format to be imported into an emission inventory. Grid and road sources are also automatically exported to Tif and Geopackage files in the same directory as the database, consistent with the file path in the Excel file.
 
-Indirect emissions, specified by an activity, activity rate and emission factors, are added by a column act:activity_name (see templates for example).
+#### Analyse emissions
+Aggregate (sum) emissions per activity code in the chosen codeset and store as an Excel file. Sources which do not have an activity code assigned will be summed separately from the other sources with defined activity code. Direct emissions (defined with `subst:??`) and indirect emissions (defined by activity rates and emission factors) are aggregated together.
 
-**TODO** timevar should be optional for areasources as well
-
-#### Edit
-**TODO**
-Currently, values can only be edited by loading layers interactively, and then for example moving the point or corners of a polygon using QGIS functionality. Parameter values can also be changed by right clicking on the interactively loaded layer, choose Open Attribute Table, Toggle Editing, and changing a number in the table. 
-
-The currently easiest way to change emissions is to change the input file and import it again. If changes were made to the emissions through the QGIS functionality after emissions were imported, it is possible to first export all emissions (see export window), then change in the exported table, and import the adapted table. 
-
-Removing points or areas is currently not possible. The most straightforward way to do this is to export all emissions, remove the points or polygons that should be removed, and create a **new** database where the new input file is imported. Just importing an input file where some sources are removed to an existing database will **not** remove those sources.
-
-#### Export
-Exports all data currently stored in the database to a file which has the correct format to be imported into an emission inventory.
-
-#### Analyse
-Aggregate (sum) emissions per sector and store as a csv file (**TODO** codeset cannot be chosen by user yet, taking codeset 1 as default).
-
-Calculate raster of emissions and store as netcdf file. See instructions in QGIS window. 
+Calculate raster of emissions and store as NetCDF file. A dialog will pop up where the user can choose the extent, coordinate system and resolution of the output raster. A begin and end date can also be specified to create NetCDF files with one band for every hour in the specified time range.
 
 #### Load layers
-Layers can be loaded interactively, to always reflect the current state of the database which Eclair is connected to, or as a 'snapshot' of the state of the database when the 'Visualize all current sources' button is clicked. This latter button will add the date and time of creation of the layers to the layer name. Changes in the 'snapshot' layer will **not** be reflected in the database. However, the benifit of such a snapshot layer is that it will link the static information about sources (chimney_height etc) with both direct and indirect emissions of the sources. This is not (yet?) possible when visualizing layers interactively. Use the 'Identify Features' (often with shortcut ctrl+shift+i) to study the emissions. Note that the identify features tool only works on the layer which is currently selected in the Layers panel.
+Layers can be loaded dynamically, to always reflect the current state of the database which Eclair is connected to, or as a static 'snapshot' of the state of the database. The static visualisation will add the date and time of creation of the layers to the layer name. Changes in the 'snapshot' layer will **not** be reflected in the database. However, the benifit of such a snapshot layer is that it links both direct and indirect emissions to the sources. This is not possible when visualizing layers dynamically. The dynamical layers only show source related parameters such as `source_name` and `chimney_height`. Use the 'Identify Features' functionality in QGIS (most QGIS users can use the shortcut ctrl+shift+i) to study the emissions. Note that the identify features tool only works on the layer which is currently selected in the Layers panel.
+
+Grid sources can only be loaded as static layers, not dynamically.
+
+
+#### Edit imported emissions
+Values can only edited by loading layers dynamically, and then moving a point or corners of a polygon or road using QGIS functionality. Source parameters such as `chimney_height` can be changed by right clicking on the dynamically loaded layer, choose 'Open Attribute Table', 'Toggle Editing', and change a number in the table. 
+
+The currently easiest way to change emissions is to change the input file and update sources by importing it again (for area, point and grid sources). If changes were made to the sources through the QGIS functionality after emissions were imported, it is possible to first export all emissions as they are in the databse (using Eclairs 'Export' panel), then change in the exported file, and import the adapted file again. To edit parameters related to road sources, the most straightforward way is to export all sources to Excel, create a new database, adept the exported Excel file and import it to the new database.
+
+Removing sources using QGIS functionality to edit layers is currently not possible. The most straightforward way to do this is to export all emissions, remove the points or polygons that should be removed, and create a **new** database where the new input file is imported. Just importing a file where some sources are removed to an existing database will **not** remove those sources, it will only update the sources in the file and leaving all other sources in the database unchanged.
 
 
 ## Development
