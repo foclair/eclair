@@ -1084,7 +1084,7 @@ class RunImportTask(QgsTask):
         QgsMessageLog.logMessage('Started import task', MESSAGE_CATEGORY, Qgis.Info)
         try:
             self.backup_path, self.proc = run_import(self.file_path, self.sheets, dry_run=self.dry_run)
-            for i in range(1200):
+            for i in range(3600):
                 # Check if the file size is greater than zero
                 if self.check_process_ready(): 
                     return True
@@ -1103,7 +1103,7 @@ class RunImportTask(QgsTask):
                         self.setProgress(i)
                     else:
                         self.setProgress(50+i/1150.*50.)
-            self.exception = "Failed to import file within 20 minutes, decrease file size"
+            self.exception = "Failed to import file within one hour, decrease file size"
         except Exception as e:
             self.exception =  e
             return False
@@ -1271,7 +1271,7 @@ class RunBackgroundTask(QgsTask):
         QgsMessageLog.logMessage(f"Started task {self.description()}", MESSAGE_CATEGORY, Qgis.Info)
         try:
             self.proc = self.function(*self.args, **self.kwargs)
-            for i in range(1200):
+            for i in range(3600):
                 # Check if the process is ready
                 if self.check_process_ready(): 
                     return True
@@ -1284,7 +1284,7 @@ class RunBackgroundTask(QgsTask):
                         self.setProgress(i)
                     else:
                         self.setProgress(50+i/1150.*50.)
-            self.exception = f"Failed to complete {self.description()} within 20 minutes."
+            self.exception = f"Failed to complete {self.description()} within one hour."
         except Exception as e:
             self.exception =  e
             return False

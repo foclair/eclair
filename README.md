@@ -66,8 +66,9 @@ If the amount of emissions is not known, but the activity of the source is known
 
 #### DB Settings
 Here you choose which database to edit. Every time the plugin is started, a database has to be chosen or created.
-When creating a new database, it is now **obligatory** to give a name ending in ".gpkg" (this will likely change in next update).
 If you receive an error message stating "ModuleNotFoundError: No module named 'etk'", make sure that you opened the version of QGIS connected to your OSGeo4W installation (as QGIS could be installed twice, once as stand-alone and once as part of OSGeo4W). The executable of the program connected to OSGeo4W can be found in `OSGeo4W/bin/qgis-ltr-bin`. Always use this version of QGIS when working with Eclair. 
+
+When creating a new database, a coordinate reference system needs to be chosen. **TODO more info here, what is it used for?**
 
 #### Import emissions
 **TODO decide where to store templates for users**
@@ -153,6 +154,7 @@ For grid sources, the columns `subst:` and `act:` can either contain a number, w
 Exports all data currently stored in the database to an Excel file which has the correct format to be imported into an emission inventory. Grid and road sources are also automatically exported to Tif and Geopackage files in the same directory as the database, consistent with the file path in the Excel file.
 
 #### Analyse emissions
+The output file names chosen for 
 Aggregate (sum) emissions per activity code in the chosen codeset and store as an Excel file. Sources which do not have an activity code assigned will be summed separately from the other sources with defined activity code. Direct emissions (defined with `subst:??`) and indirect emissions (defined by activity rates and emission factors) are aggregated together.
 
 Calculate raster of emissions and store as NetCDF file. A dialog will pop up where the user can choose the extent, coordinate system and resolution of the output raster. A begin and end date can also be specified to create NetCDF files with one band for every hour in the specified time range.
