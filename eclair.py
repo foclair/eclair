@@ -1137,15 +1137,18 @@ class RunImportTask(QgsTask):
             updates = []
 
             def handle_line(l):
+                error = False
                 if l.startswith("VALIDATION"):
                     validation_msgs.append(l.split("VALIDATION:")[1].strip())
                 elif l.startswith("ERROR"):
                     validation_msgs.append(l)
                 else:
+                    error = True
                     QgsMessageLog.logMessage(l, level=Qgis.Info)
-                return None
+                return error
             
             error = False
+            # from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
             if  'successfully' in self.stderr_content:
                 if self.dry_run:
                     changes = eval(self.stderr_content.split('\n')[-2].split("validated")[1].strip())
@@ -1156,7 +1159,10 @@ class RunImportTask(QgsTask):
                 error = True
             else:
                 for l in self.stderr_content.split('\n'):
-                    handle_line(l)
+                    error = handle_line(l)
+                if error:
+                    traceback = self.stderr_content
+
 
             if self.backup_path is not None:
                 self.backup_path.unlink()
