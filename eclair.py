@@ -25,17 +25,32 @@
 from PyQt5.QtWidgets import QApplication, QAction, QWidget, QDockWidget, QTableWidget, QTableWidgetItem
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QMessageBox, QComboBox
 from PyQt5.QtWidgets import QFileDialog, QCheckBox, QRadioButton, QButtonGroup, QTabWidget, QMainWindow, QLineEdit
-
+from PyQt5.QtCore import pyqtSlot
 
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
 from PyQt5.QtCore import Qt
 from qgis.utils import iface
-from qgis.core import QgsVectorLayer, QgsProject, QgsDataSourceUri, QgsCoordinateReferenceSystem,  QgsRasterLayer,  QgsProviderRegistry,  QgsCoordinateTransform, QgsVectorLayerJoinInfo
+from qgis.core import (
+    QgsVectorLayer,
+    QgsProject,
+    QgsDataSourceUri,
+    QgsCoordinateReferenceSystem,
+    QgsRasterLayer,
+    QgsProviderRegistry,
+    QgsCoordinateTransform,
+    QgsVectorLayerJoinInfo,
+    QgsMessageLog,
+    QgsLayerTreeLayer,
+    Qgis, QgsApplication, QgsTask,
+    QgsSingleBandGrayRenderer,
+    QgsRasterBandStats
+)
 from qgis.gui import QgsProjectionSelectionDialog
 import time
 
 import os
+import glob
 import sys
 import subprocess
 import site
@@ -44,10 +59,15 @@ import ast
 import re
 from pathlib import Path
 import datetime
+import json
+from tempfile import NamedTemporaryFile, gettempdir
+from osgeo import gdal
+
+import sqlite3
+import rasterio
 
 import processing
-
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 if os.name != "nt":
     ETK_BINPATH = os.path.expanduser("~/.local/bin")
@@ -65,13 +85,25 @@ else:
     # os.environ['PATH'] = OSGEO4W + r"\bin;" + os.environ['PATH']
     os.environ['PATH'] = os.path.expanduser("~\AppData\Roaming\Python\Python39\Scripts;") + os.environ['PATH']
 
-       
+from etk.edb.const import SHEET_NAMES
+from etk.tools.utils import (
+    CalledProcessError, 
+    create_from_template, 
+    set_settings_srid,
+    run_import,
+    run_export,
+    run_update_emission_tables,
+    run_aggregate_emissions, 
+    run_rasterize_emissions,
+    run_get_settings
+)
+        
 class Eclair(QWidget):
     def __init__(self, iface):
         super(Eclair, self).__init__()
         self.iface = iface
         self.setWindowTitle("ECLAIR")
-        self.dock_widget = None  # Initialize the dock widget        
+        self.dock_widget = None  
 
     def initGui(self):
         self.action = QAction('Eclair!', self.iface.mainWindow())
@@ -101,17 +133,11 @@ class EclairDock(QDockWidget):
         # Create a main widget for the dock widget
         self.main_widget = QWidget(self)
         self.setWidget(self.main_widget)
-        # Set the minimum height for the dock widget
         self.setMinimumHeight(200) 
-        # Set the layout for the main widget
         layout = QVBoxLayout(self.main_widget)
         self.tab_widget = QTabWidget(self.main_widget)
         layout.addWidget(self.tab_widget)
 
-        # To automatically update database changes in visualized layer
-        # self.setup_watcher()
-        # watcher not necessary for point and area sources, reloaded from gpkg
-        # as soon as view of canvas changes (zoom etc)
         default_font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
         italic_font = default_font
         italic_font.setItalic(True)
@@ -125,7 +151,7 @@ class EclairDock(QDockWidget):
         # Add tabs to the tab widget
         self.tab_widget.addTab(self.tab_db, "DB Settings")
         self.tab_widget.addTab(self.tab_import, "Import")
-        self.tab_widget.addTab(self.tab_edit, "Edit")
+        # self.tab_widget.addTab(self.tab_edit, "Edit")
         self.tab_widget.addTab(self.tab_export, "Export")
         self.tab_widget.addTab(self.tab_calculate, "Analyse")
         self.tab_widget.addTab(self.tab_visualize, "Load Layers")
@@ -146,10 +172,11 @@ class EclairDock(QDockWidget):
         layout_db.addWidget(btn_action_new_database)
         btn_action_new_database.clicked.connect(self.create_new_database_dialog)
 
-        btn_action_edit_db_settings = QPushButton("Edit database settings", self.tab_db)
-        btn_action_edit_db_settings.setFont(italic_font)
-        layout_db.addWidget(btn_action_edit_db_settings)
-        btn_action_edit_db_settings.clicked.connect(self.edit_db_settings)
+        #TODO
+        # btn_action_edit_db_settings = QPushButton("Edit database settings", self.tab_db)
+        # btn_action_edit_db_settings.setFont(italic_font)
+        # layout_db.addWidget(btn_action_edit_db_settings)
+        # btn_action_edit_db_settings.clicked.connect(self.edit_db_settings)
 
         # Import
         layout_import = QVBoxLayout()
@@ -166,15 +193,16 @@ class EclairDock(QDockWidget):
         layout_import.addWidget(btn_action_import_sources)
         btn_action_import_sources.clicked.connect(self.import_sources)
 
+        #TODO
         # Edit
-        layout_edit = QVBoxLayout()
-        layout_edit.setAlignment(Qt.AlignTop)
-        self.tab_edit.setLayout(layout_edit)
-        label = QLabel("Edit or remove data.", self.tab_edit)
-        layout_edit.addWidget(label)
-        btn_action_edit = QPushButton(" Edit data", self.tab_edit)
-        btn_action_edit.setFont(italic_font)
-        layout_edit.addWidget(btn_action_edit)
+        # layout_edit = QVBoxLayout()
+        # layout_edit.setAlignment(Qt.AlignTop)
+        # self.tab_edit.setLayout(layout_edit)
+        # label = QLabel("Edit or remove data.", self.tab_edit)
+        # layout_edit.addWidget(label)
+        # btn_action_edit = QPushButton(" Edit data", self.tab_edit)
+        # btn_action_edit.setFont(italic_font)
+        # layout_edit.addWidget(btn_action_edit)
 
         # Export
         layout_export = QVBoxLayout()
@@ -186,10 +214,10 @@ class EclairDock(QDockWidget):
         layout_export.addWidget(btn_action_export_all)
         btn_action_export_all.clicked.connect(self.export_dialog)
 
-
-        btn_action_export = QPushButton(" Export only pointsources", self.tab_export)
-        btn_action_export.setFont(italic_font)
-        layout_export.addWidget(btn_action_export)
+        #TODO
+        # btn_action_export = QPushButton(" Export only pointsources", self.tab_export)
+        # btn_action_export.setFont(italic_font)
+        # layout_export.addWidget(btn_action_export)
 
         # Calculate emissions
         layout_calculate = QVBoxLayout()
@@ -197,10 +225,6 @@ class EclairDock(QDockWidget):
         self.tab_calculate.setLayout(layout_calculate)
         label = QLabel("Create a Excel file with aggregated emissions per sector.", self.tab_calculate)
         layout_calculate.addWidget(label)
-
-        # btn_action_create_table = QPushButton(" Create table all pointsources and areasources, combining direct emissions and activities", self.tab_calculate)
-        # layout_calculate.addWidget(btn_action_create_table)
-        # btn_action_create_table.clicked.connect(self.create_emission_table_dialog)
 
         btn_action_aggregate = QPushButton("Aggregate emissions", self.tab_calculate)
         layout_calculate.addWidget(btn_action_aggregate)
@@ -217,7 +241,7 @@ class EclairDock(QDockWidget):
         layout_visualize.setAlignment(Qt.AlignTop)
         self.tab_visualize.setLayout(layout_visualize)
 
-        label = QLabel("Load layers without emissions (dynamic)", self.tab_visualize)
+        label = QLabel("Load source geometries without emissions (dynamic)", self.tab_visualize)
         layout_visualize.addWidget(label)
 
         dynamic_sources_layout = QHBoxLayout()
@@ -232,7 +256,7 @@ class EclairDock(QDockWidget):
         btn_action_visualize_road.clicked.connect(self.load_roadsource_canvas)
         layout_visualize.addLayout(dynamic_sources_layout)
         
-        label = QLabel("Load sources with emissions (static)\n"
+        label = QLabel("Load source geometries with emissions (static)\n"
         "Layers have to be re-loaded each time the inventory is updated.", self.tab_visualize)
         layout_visualize.addWidget(label)
         
@@ -246,6 +270,9 @@ class EclairDock(QDockWidget):
         btn_action_visualize_join_road = QPushButton("Roads", self.tab_visualize)
         static_sources_layout.addWidget(btn_action_visualize_join_road)
         btn_action_visualize_join_road.clicked.connect(self.load_joined_roadsource_canvas)
+        btn_action_visualize_join_grid = QPushButton("Grids", self.tab_visualize)
+        static_sources_layout.addWidget(btn_action_visualize_join_grid)
+        btn_action_visualize_join_grid.clicked.connect(self.load_joined_gridsource_canvas)
         layout_visualize.addLayout(static_sources_layout)
 
     def update_db_label(self):
@@ -272,7 +299,6 @@ class EclairDock(QDockWidget):
             # user cancelled
             message_box('Warning','No *.gpkg file chosen, database not created.')
         else:
-            from etk.tools.utils import CalledProcessError, create_from_template, set_settings_srid
             try:
                 epsg = self.show_srid_dialog()
                 proc = create_from_template(db_path)
@@ -301,10 +327,10 @@ class EclairDock(QDockWidget):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open spreadsheet with point- and/or areasource data file", "", "Spreadsheet files (*.xlsx)")
         if file_path: #if file_path not empty string (user did not click cancel)
             from openpyxl import load_workbook
-            workbook = load_workbook(filename=file_path, data_only=True)
+            workbook = load_workbook(filename=file_path, data_only=True, read_only=True)
             # workbook.worksheets  compare to SHEET_NAMES
-            from etk.edb.const import SHEET_NAMES
             valid_sheets = [sheet.title for sheet in workbook.worksheets if sheet.title in SHEET_NAMES]
+            workbook.close()
             
             checkboxDialog = CheckboxDialog(self,valid_sheets, self.dry_run)
             result = checkboxDialog.exec_()  # Show the dialog as a modal dialog
@@ -319,32 +345,14 @@ class EclairDock(QDockWidget):
                     return
                 sheets = SHEET_NAMES
             
-            from etk.tools.utils import CalledProcessError, run_import
-            try:
-                (stderr, stdout) = run_import(file_path, sheets, dry_run=self.dry_run)
-                if self.dry_run:
-                    if "ERROR" in stdout.decode("utf-8"):
-                        # len_errors = len(stdout.decode("utf-8").split("\n"))-2
-                        tableDialog = TableDialog(self,'Validation status',f"Validated file successfully. \n "
-                        +f"Found errors, correct spreadsheet using error information given below before importing data: \n",
-                        stdout.decode("utf-8"))
-                    else:
-                        tableDialog = TableDialog(self,'Validation status','Validated file successfully. \n'
-                        + "No changes to database yet, but number of features to be created or updated if file would be imported are summarized in table.",
-                        stdout.decode("utf-8"))
-                    tableDialog.exec_() 
-                else:
-                    tableDialog = TableDialog(self,'Import status','Imported data successfully. \n'
-                    + ' Number of features created or updated summarized in table.',stdout.decode("utf-8"))
-                    tableDialog.exec_()  
-            except CalledProcessError as e:
-                error = e.stderr.decode("utf-8")
-                if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
-                    message_box('Error',f"Error: a target database is not specified yet,"
-                    +" choose an existing or create a new database first.")
-                else:
-                    import_error = error.split('ImportError:')[-1]
-                    message_box('Import error',f"Error: {import_error}")
+            # from qgis.PyQt.QtCore import pyqtRemoveInputHook
+            # pyqtRemoveInputHook()
+            if self.dry_run:
+                description = "Eclair data validation"
+            else:
+                description = "Eclair data import"
+            self.importtask = RunImportTask(description,file_path,sheets)
+            QgsApplication.taskManager().addTask(self.importtask)
         else:
             # user cancelled
             message_box('Import error','No file chosen, no data imported.')
@@ -352,64 +360,75 @@ class EclairDock(QDockWidget):
 
 
     def export_dialog(self):
-        from etk.tools.utils import CalledProcessError, run_export
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for exported emissions", "", "(*.xlsx)")
         if (filename == ''):
             # user cancelled
             message_box('Warning','No *.xlsx file chosen, emissions not exported.')
         else:
-            try:
-                (stdout, stderr) = run_export(filename)
-                message_box('Export emissions',"Successfully exported emissions.")
-            except CalledProcessError as e:
-                error = e.stderr.decode("utf-8")
-                message_box('Export error',f"Error: {error}")
+            if filename and not filename.endswith('.xlsx'):
+                filename += '.xlsx'
+            self.task = RunBackgroundTask(
+                description="Export data",
+                function=run_export,
+                parent=self,
+                filename=filename
+            )
+            QgsApplication.taskManager().addTask(self.task)
     
 
-    def create_emission_table_dialog(self):
-        #TODO catch exception if database does not have any emissions imported yet
-        from etk.tools.utils import CalledProcessError, run_update_emission_tables
+    def create_emission_table(self):
+        #TODO catch exception if database does not have any emissions imported yet       
         db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
-        try:
-            (stdout, stderr) = run_update_emission_tables(db_path)
-        except CalledProcessError as e:
-            error = e.stderr.decode("utf-8")
-            message_box('Eclair error',f"Error: {error}")
+        self.task = RunBackgroundTask(
+                description="Prepare emissions for static visualisation",
+                function=run_update_emission_tables,
+                parent=self,
+                db_path=db_path,
+                sourcetypes=self.source_type
+        )
+        QgsApplication.taskManager().addTask(self.task)
+
 
     def aggregate_emissions_dialog(self):
-        self.create_emission_table_dialog()
-        from etk.tools.utils import CalledProcessError, run_aggregate_emissions
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for aggregated emissions table", "", "(*.xlsx)")
         if (filename == ''):
             # user cancelled
             message_box('Warning','No file chosen, aggregated table not created.')
         else:
+            if filename and not filename.endswith('.xlsx'):
+                filename += '.xlsx'
             try:
                 self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
                 # Load codesets table
-                layer = QgsVectorLayer(f"{self.db_path}|layername=codesets", "codesets", 'ogr')
-                codesets = []
-                for codeset in layer.getFeatures():
-                    codesets.append(codeset["slug"])
-                # codesetDialog = ChooseCodesetDialog(self,codesets)
-                # codesetDialog.exec_()
-                message_box('Aggregate emissions',f"Aggregate emissions for codeset NFR")
-                #TODO take first codeset by default, but should give user choice which to aggregate for
-                (stdout, stderr) = run_aggregate_emissions(filename,codeset="NFR")
-                message_box('Aggregate emissions',"Successfully aggregated emissions.")
+                connection = sqlite3.connect(self.db_path)
+                cursor = connection.cursor()
+                cursor.execute("SELECT slug FROM codesets LIMIT 3")
+                codesets = [row[0] for row in cursor.fetchall()]
+                connection.close()
+                if len(codesets) > 0:
+                    codesetDialog = ChooseCodesetDialog(self,filename,codesets)
+                    codesetDialog.exec_()
+                else:
+                    # aggregating all substances when no codeset defined
+                    self.task = RunBackgroundTask(
+                        description="Aggregate emissions",
+                        function=run_aggregate_emissions,
+                        parent=self,
+                        filename=filename
+                    )
+                    QgsApplication.taskManager().addTask(self.task)
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 message_box('Aggregation error',f"Error: {error}")
     
     def rasterize_emissions_dialog(self):
-        from etk.tools.utils import CalledProcessError, run_rasterize_emissions
-        outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files")
-        if (outputpath == ''):
+        self.outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files")
+        if (self.outputpath == ''):
             # user cancelled
             message_box('Rasterize error','No directory chosen, raster files not created.')
         else:
             # Get a list of files in the directory
-            files_in_directory = os.listdir(outputpath)
+            files_in_directory = os.listdir(self.outputpath)
             # Filter the list to include only NetCDF files
             netcdf_files = [file for file in files_in_directory if file.endswith(".nc")]
             if netcdf_files:
@@ -417,7 +436,7 @@ class EclairDock(QDockWidget):
                 + "New rasters will be named after the substances in the emission inventory "
                 + "(for example PM10.nc). Files cannot be overwritten, so if such files already exist, "
                 + "create a new output directory.")
-                outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files, where no emissions rasters exist yet.")
+                self.outputpath = QFileDialog.getExistingDirectory(None, "Choose output directory for raster NetCDF files, where no emissions rasters exist yet.")
             try:
                 rasterDialog = RasterizeDialog(self)
                 result = rasterDialog.exec_()  # Show the dialog as a modal dialog
@@ -425,56 +444,152 @@ class EclairDock(QDockWidget):
                     # user cancelled
                     message_box('Rasterize error',"No extent, srid and resolution defined, rasterization cancelled.")
                     return
-                load_canvas = rasterDialog.load_to_canvas
-                if load_canvas:
-                    time_threshold = time.time() 
+                self.load_canvas = rasterDialog.load_to_canvas
+                if self.load_canvas:
+                    self.time_threshold = time.time()
                 if rasterDialog.date[0] != '':
-                    (stdout, stderr) = run_rasterize_emissions(
-                        outputpath,
-                        rasterDialog.cell_size, 
+                    begin = datetime.datetime.strptime(rasterDialog.date[0], "%Y-%m-%d")
+                    end = datetime.datetime.strptime(rasterDialog.date[1], "%Y-%m-%d")
+                    self.task = RunBackgroundTask(
+                        description="Rasterize emissions",
+                        function=run_rasterize_emissions,
+                        parent=self,
+                        outputpath=self.outputpath,
+                        cellsize=rasterDialog.cell_size, 
                         extent=rasterDialog.extent, 
                         srid=rasterDialog.raster_srid,
-                        begin=rasterDialog.date[0],
-                        end=rasterDialog.date[1]
+                        begin=begin,
+                        end=end
                     )
+                    
                 else: 
-                    (stdout, stderr) = run_rasterize_emissions(
-                        outputpath, 
-                        rasterDialog.cell_size, 
+                    self.task = RunBackgroundTask(
+                        description="Rasterize emissions",
+                        function=run_rasterize_emissions,
+                        parent=self,
+                        outputpath=self.outputpath, 
+                        cellsize=rasterDialog.cell_size, 
                         extent=rasterDialog.extent, 
                         srid=rasterDialog.raster_srid
                     )
-                # TODO check if files are created, if not issue warning that sources may be outside of extent
-                message_box('Rasterize emissions',"Successfully rasterized emissions.")
-                if load_canvas:
-                    # Get a list of files in the directory
-                    files_in_directory = os.listdir(outputpath)
-                    # Filter the list to include only files modified after the time threshold
-                    modified_rasters = [file for file in files_in_directory 
-                    if (os.path.getmtime(os.path.join(outputpath, file)) > time_threshold)
-                    and file.endswith(".nc")]
-                    # Check if there are any modified files
-                    if modified_rasters:
-                        load_rasters_to_canvas(outputpath,modified_rasters)
+                
+                QgsApplication.taskManager().addTask(self.task)
+
             except CalledProcessError as e:
                 error = e.stderr.decode("utf-8")
                 message_box('Rasterize error',f"Error: {error}")
+    
 
     def load_joined_pointsource_canvas(self):
         self.source_type = 'point'
-        self.load_join()
+        self.create_emission_table()
+
 
     def load_joined_areasource_canvas(self):
         self.source_type = 'area'
-        self.load_join()
+        self.create_emission_table()
 
     def load_joined_roadsource_canvas(self):
         self.source_type = 'road'
-        self.load_join()
+        self.create_emission_table()
+
+
+    def load_joined_gridsource_canvas(self):
+        try:
+            self.db_path = os.environ.get("ETK_DATABASE_PATH", None)
+            if self.db_path is None:
+                message_box('Load GridSource error','Database not set yet, connect to '
+                + ' an existing database or create a new one.')
+                return
+            connection = sqlite3.connect(self.db_path)
+            cursor = connection.cursor()
+            cursor.execute("SELECT id, name FROM edb_gridsource")
+            result = cursor.fetchall()
+            if len(result) > 0:
+                timestamp = datetime.datetime.now().strftime("%m-%d-%Y_%H:%M")
+                source_id, source_name = zip(*[(x[0], x[1]) for x in result])
+                cursor.execute("SELECT source_id, raster FROM edb_gridsourcesubstance")
+                result = cursor.fetchall()
+                if len(result) > 0:
+                    gss_source_id, gridsourcesubstance_rasters = zip(*[(x[0], x[1]) for x in result])
+                else:
+                    gss_source_id, gridsourcesubstance_rasters = [], []
+                cursor.execute("SELECT source_id, raster FROM edb_gridsourceactivity")
+                result = cursor.fetchall()
+                if len(result) > 0:
+                    gsa_source_id, gridsourceactivity_rasters = zip(*[(x[0], x[1]) for x in result])
+                else:
+                    gsa_source_id, gridsourceactivity_rasters = [], []
+                connection.close()
+                dbname = os.path.basename(self.db_path).split('.')[0]
+                output_path = os.path.join(gettempdir(),dbname)
+                if not os.path.exists(output_path):
+                    os.mkdir(output_path)
+                self.load_canvas = True
+                self.time_threshold = time.time()
+                for id, name in zip(source_id, source_name):
+                    positions = [i for i, x in enumerate(gss_source_id) if x == id]
+                    gss_rasters = [gridsourcesubstance_rasters[i] for i in positions]
+                    positions = [i for i, x in enumerate(gsa_source_id) if x == id]
+                    gsa_rasters = [gridsourceactivity_rasters[i] for i in positions]
+                    unique_rasters = set(gss_rasters + gsa_rasters)
+                    extent=[]
+                    cellsize=[]
+                    srid=[]
+                    for raster in unique_rasters:
+                        raster_layer = QgsRasterLayer(f'GPKG:{self.db_path}:raster_{raster}',raster)
+                        raster_extent = (
+                            raster_layer.dataProvider().extent().xMinimum(),
+                            raster_layer.dataProvider().extent().yMinimum(),
+                            raster_layer.dataProvider().extent().xMaximum(),
+                            raster_layer.dataProvider().extent().yMaximum()
+                        )
+                        extent.append(raster_extent)
+                        cellsize.append((raster_extent[2]-raster_extent[0])/raster_layer.dataProvider().xSize())
+                        srid.append(raster_layer.crs().postgisSrid())
+                    srid=set(srid)
+                    if len(srid) != 1:
+                        message_box('Load layers error',f"Cannot load grids with undefined or multiple srid for gridsource {name}")
+                    else:
+                        srid = srid.pop()
+                    min_cellsize = min(cellsize)
+                    result_extent = (
+                        min(t[0] for t in extent), 
+                        min(t[1] for t in extent), 
+                        max(t[2] for t in extent), 
+                        max(t[3] for t in extent)
+                    )
+                    self.outputpath = os.path.join(gettempdir(),dbname+'-'+name+'-'+timestamp)
+                    if not os.path.exists(self.outputpath):
+                        os.mkdir(self.outputpath)
+                    else:
+                        old_rasters = os.listdir(self.outputpath)
+                        for file in old_rasters:
+                            os.remove(os.path.join(self.outputpath,file))
+                    # simultaneously running background tasks cannot have the same 
+                    # variable name (eg self.task)
+                    # message_box("rasterize task",f"cell size {min_cellsize}, extent {extent}, srid {srid}, grid_ids {id}")
+                    setattr(self, f'task_{name}', RunBackgroundTask(
+                        description=f"Rasterize emissions {name}",
+                        function=run_rasterize_emissions,
+                        parent=self,
+                        outputpath=self.outputpath, 
+                        cellsize=min_cellsize, 
+                        extent=result_extent, 
+                        srid=srid,
+                        grid_ids=id
+                    ))
+                    QgsApplication.taskManager().addTask(getattr(self,f'task_{name}'))
+            else:
+                message_box("Load layers info","No gridsources exist in database.")
+        except CalledProcessError as e:
+            error = e.stderr.decode("utf-8")
+            message_box('Load layers error',f"Error: {error}")
 
     def load_joined_sources_canvas(self):
         for self.source_type in ['point', 'area','road']:
-            self.load_join()
+            self.create_emission_table()
+
 
     def load_pointsource_canvas(self):
         self.source_type = 'point'
@@ -493,11 +608,6 @@ class EclairDock(QDockWidget):
         self.load_interactive()
 
     def load_join(self):
-        # create/update emission table to load joined layers
-        # TODO should only create emission table for self.source_type!
-        # in this way, doing all source types every time load_join is called.
-        self.create_emission_table_dialog()
-        # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
@@ -523,10 +633,7 @@ class EclairDock(QDockWidget):
         else:
             message_box('Warning', f"Cannot load layer, sourcetype {source_type} unknown.")
 
-        # TODO this joined layer does not update automatically when tables are changed.
-        # should use the setup_watcher() ?
-
-        # get the parameters for join by doing join through processing toolbox,
+        # Create parameters for join by doing join through processing toolbox,
         # and using the lower button 'Advanced' > 'Copy as Python Command'
         parameters = { 'DISCARD_NONMATCHING' : False, 
         'FIELD' : 'id', # id in table for join
@@ -549,13 +656,14 @@ class EclairDock(QDockWidget):
             'DISCARD_NONMATCHING':False,
             'PREFIX':'codeset1_',
             'OUTPUT':'TEMPORARY_OUTPUT'}
-
-            tmp_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
-
+            ac1_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
+            
+            parameters_codeset_join['INPUT'] = ac1_join
             parameters_codeset_join['PREFIX'] = 'codeset2_'
             parameters_codeset_join['FIELD'] = 'activitycode2_id'
-            tmp_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
+            ac2_join = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
 
+            parameters_codeset_join['INPUT'] = ac2_join
             parameters_codeset_join['PREFIX'] = 'codeset3_'
             parameters_codeset_join['FIELD'] = 'activitycode3_id'
             self.layer = processing.run('qgis:joinattributestable',parameters_codeset_join)['OUTPUT']
@@ -566,7 +674,6 @@ class EclairDock(QDockWidget):
 
 
     def load_interactive(self):
-        # Get the path to the SQLite database file
         self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
@@ -602,9 +709,7 @@ class EclairDock(QDockWidget):
         crs_dialog = QgsProjectionSelectionDialog()
         crs_dialog.setWindowTitle("Select default coordinate system for your database")
         if crs_dialog.exec_():
-            # Get the selected CRS
             crs = crs_dialog.crs()
-            # Get the EPSG code
             epsg_code = crs.authid().split(":")[-1]
             return epsg_code
         else:
@@ -619,7 +724,6 @@ def show_help(self):
 
 
 def message_box(title,text):
-    # For this example, let's display the file contents in a message box.
     msg_box = QMessageBox()
     msg_box.setWindowTitle(title)
     msg_box.setText(text)
@@ -643,15 +747,14 @@ class CheckboxDialog(QDialog):
             self.setWindowTitle("Import data")
         layout.addWidget(label)
 
-        # Create checkboxes for each element in the list
+        # Create checkboxes for each element in box_labels
         self.checkboxes = {}
         for label in self.box_labels:
             checkbox = QCheckBox(label)
-            checkbox.setChecked(True)  # Set initial state
+            checkbox.setChecked(True)  
             layout.addWidget(checkbox)
             self.checkboxes[label] = checkbox
 
-        # Set the layout for the dialog
         self.setLayout(layout)
 
         if self.dry_run:
@@ -662,9 +765,8 @@ class CheckboxDialog(QDialog):
         btn_action_import_sheets.clicked.connect(self.import_sheets_dialog)
 
     def import_sheets_dialog(self):
-        # Store the state of the checkboxes
+        # Store the state of the checkboxes and close dialog
         self.sheet_names = [label for label in self.box_labels if self.checkboxes[label].isChecked()]
-        # close the checkbox dialog
         self.accept()
 
 class RasterizeDialog(QDialog):
@@ -673,6 +775,8 @@ class RasterizeDialog(QDialog):
         self.initUI()
 
     def initUI(self):
+        settings = run_get_settings()
+        
         # Create a layout for the dialog
         self.setWindowTitle("Define rasterize settings")
         layout = QVBoxLayout()
@@ -681,38 +785,32 @@ class RasterizeDialog(QDialog):
         +"Raster extent and resolution have to be provided in meters, not degrees (a raster with EPSG 4326 is not possible).")
         layout.addWidget(label)
 
-        # Add QLineEdit for user to input a number
         srid_label = QLabel("Enter a coordinate system (EPSG, 4-5 integers):")
         layout.addWidget(srid_label)
         self.srid_input = QLineEdit(self)
-        # text inside box self.srid_input.setPlaceholderText("SRID")
         self.srid_input.setInputMask("99999")  # Max 5 integers
         self.srid_input.setMaximumWidth(150)
         # Initialize with current canvas CRS
         canvas_crs = iface.mapCanvas().mapSettings().destinationCrs()
         canvas_epsg = int(canvas_crs.authid().split(':')[-1])
-        default_epsg = 3857
+        default_epsg = settings.srid
         if canvas_epsg != 4326:
             self.srid_input.setText(str(canvas_epsg))
         else:
             self.srid_input.setText(str(default_epsg))
         layout.addWidget(self.srid_input)
 
-        # Add QLineEdit for user to input a number
-        # TODO would be nice to allow 'current canvas extent', or 'smallest extent to cover all sources'? 
+        # TODO would be nice to have option 'smallest extent to cover all sources'
         extent_label = QLabel("Enter x and y coordinates for lower left (x1, y1) and upper right (x2, y2) corners of output extent:")
         layout.addWidget(extent_label)
-        # Horizontal box for extent
         extent_layout = QHBoxLayout()
         self.extent_input = {}
         self.extent_labels = ["x1:", "y1:", "x2:" ,"y2:"]
         current_extent = iface.mapCanvas().extent()
         if canvas_epsg == 4326:
-            # convert from degrees to default_epsg
+            # convert from degrees to default_epsg, raster coordinates have to be metric
             target_crs = QgsCoordinateReferenceSystem(default_epsg)
-            # Create a coordinate transform object
             transform = QgsCoordinateTransform(canvas_crs, target_crs, QgsProject.instance())
-            # Transform the extent to the target CRS
             current_extent = transform.transform(current_extent)
 
         current_corners = {"x1:":floor(current_extent.xMinimum()/1000)*1000,
@@ -724,7 +822,7 @@ class RasterizeDialog(QDialog):
             label = QLabel(label_text)
             extent_layout.addWidget(label)
             line_edit = QLineEdit(self)
-            line_edit.setValidator(QDoubleValidator())   # Set input mask for floats
+            line_edit.setValidator(QDoubleValidator())   
             line_edit.setText(str(current_corners[label_text]))
             extent_layout.addWidget(line_edit)
             self.extent_input[label_text] = line_edit
@@ -733,11 +831,9 @@ class RasterizeDialog(QDialog):
 
         resolution_label = QLabel("Enter the desired resolution of the output extent, in meters:")
         layout.addWidget(resolution_label)
-        # Horizontal box for resolution
         resolution_layout = QHBoxLayout()
         self.resolution_input = {}
         self.resolution_labels = ["resolution [m]"]
-        # leaving the for-loop in case want to go back to x and y resolution
         for label_text in self.resolution_labels:
             label = QLabel(label_text)
             resolution_layout.addWidget(label)
@@ -748,10 +844,8 @@ class RasterizeDialog(QDialog):
             self.resolution_input[label_text] = line_edit
         layout.addLayout(resolution_layout)
 
-        # Horizontal box for date
         date_label = QLabel("If one raster per hour is desired, enter begin and end date for rasters (optional).")
         # TODO etk now always assumes timezone UTC, is that desired? may be difficult to communicate different timezone
-        # could give option; local balkan timezone or utc?
         layout.addWidget(date_label)
         date_layout = QHBoxLayout()
         self.date_input = {}
@@ -768,8 +862,6 @@ class RasterizeDialog(QDialog):
         self.checkbox = QCheckBox("Load rasters to canvas after creation.")
         self.checkbox.setChecked(True)  # Set initial state
         layout.addWidget(self.checkbox)
-
-        # Set the layout for the dialog
         self.setLayout(layout)
 
         # TODO let unit be user defined?
@@ -826,8 +918,9 @@ class RasterizeDialog(QDialog):
         self.accept()
 
 class ChooseCodesetDialog(QDialog):
-    def __init__(self,plugin, codesets=None):
+    def __init__(self,plugin, filename, codesets=None):
         super().__init__()
+        self.filename = filename
         self.codesets = codesets
         self.initUI()
 
@@ -836,17 +929,29 @@ class ChooseCodesetDialog(QDialog):
         layout = QVBoxLayout()
         label = QLabel("Choose the codeset for which emissions should be aggregated.")
         layout.addWidget(label)
+        label = QLabel(str(self.codesets))
+        layout.addWidget(label)
 
         layout_buttons = QHBoxLayout()
-        for self.codeset in self.codesets:
-            btn_action = QPushButton(self.codeset)
+        for codeset_i in self.codesets:
+            btn_action = QPushButton(codeset_i)
             layout.addWidget(btn_action)
-            btn_action.clicked.connect(self.run_aggregation)
-    
-    def run_aggregation(self):
+            btn_action.clicked.connect(lambda checked, cs=codeset_i: self.run_aggregation(cs))
+        self.setLayout(layout)
+
+    @pyqtSlot()
+    def run_aggregation(self,codeset):
+        self.accept()
         try:
-            (stdout, stderr) = run_aggregate_emissions(filename,codeset=self.codeset)
-            message_box('Aggregate emissions',"Successfully aggregated emissions.")
+            message_box('Aggregate emissions',"Emission aggregation for codeset "+str(codeset)+" starts after clicking OK.\n")      
+            self.task = RunBackgroundTask(
+                description="Aggregate emissions",
+                function=run_aggregate_emissions,
+                parent=self,
+                filename=self.filename,
+                codeset=codeset
+            )
+            QgsApplication.taskManager().addTask(self.task)
         except CalledProcessError as e:
             error = e.stderr.decode("utf-8")
             message_box('Aggregation error',f"Error: {error}")
@@ -871,14 +976,8 @@ class TableDialog(QDialog):
         label = QLabel(self.text)
         layout.addWidget(label)
 
-        if self.plugin.dry_run:
-            pattern = r"data to be imported (.+)\n"
-        else:
-            pattern = r"imported data (.+)\n"
-
-        match = re.search(pattern, str(self.stdout))
-        if match is not None:
-            table_dict = eval(match.group(1))
+        if type(self.stdout) == dict:
+            table_dict = self.stdout
 
             # TODO: do not know whether timevar is updated or created, 
             # skipping from progress tabel for now
@@ -927,11 +1026,309 @@ class TableDialog(QDialog):
         self.adjustSize()
 
 
-def load_rasters_to_canvas(directory_path, raster_files):
-    for raster_file in raster_files:
-        # Construct the full path to the raster file
-        full_path = os.path.join(directory_path, raster_file)
-        # Create a raster layer
-        raster_layer = QgsRasterLayer(full_path, raster_file, "gdal")
-        # Add the raster layer to the project
-        QgsProject.instance().addMapLayer(raster_layer)
+def load_rasters_to_canvas(directory_path, time_threshold):
+    # Get a list of files in the directory
+    files_in_directory = os.listdir(directory_path)
+    # Filter the list to include only files modified after the time threshold
+    modified_rasters = [
+        file for file in files_in_directory 
+        if (os.path.getmtime(os.path.join(directory_path, file)) > time_threshold)
+        and file.endswith(".nc")
+    ]
+    # Check if there are any modified files
+    if modified_rasters:
+        project = QgsProject.instance()
+        group_name = Path(directory_path).name
+        root = project.layerTreeRoot()
+        grp = root.addGroup(group_name)
+        
+        for raster_file in modified_rasters:
+            # Construct the full path to the raster file
+            full_path = os.path.join(directory_path, raster_file)
+            # Create a raster layer
+            raster_layer = QgsRasterLayer(full_path, raster_file, "gdal")
+            # statistics band 1
+            provider = raster_layer.dataProvider()
+            stats = provider.bandStatistics(1, QgsRasterBandStats.All)
+            # only visualize non-zero rasters:
+            if stats.sum > 0:
+                # Add the raster layer to the project
+                project.addMapLayer(raster_layer, False)
+                grp.insertChildNode(1, QgsLayerTreeLayer(raster_layer))
+
+
+
+MESSAGE_CATEGORY = "Eclair info"
+
+class RunImportTask(QgsTask):
+    def __init__(self, description, file_path, sheets, dry_run=False):
+        super().__init__(description, QgsTask.CanCancel)
+        self.file_path = file_path
+        self.sheets = sheets
+        if "validation" in self.description():
+            self.dry_run = True
+        else:
+            self.dry_run = False
+        self.exception = None
+
+    def check_process_ready(self):
+        if self.proc:
+            return self.proc.poll() is not None
+        return False
+
+    def run(self):
+        """Implement heavy lifting.
+        Periodically test for isCanceled() to gracefully abort.
+        Raising exceptions here will crash QGIS, raise them in self.finished instead.
+        """
+        QgsMessageLog.logMessage('Started import task', MESSAGE_CATEGORY, Qgis.Info)
+        try:
+            self.backup_path, self.proc = run_import(self.file_path, self.sheets, dry_run=self.dry_run)
+            for i in range(3600):
+                # Check if the file size is greater than zero
+                if self.check_process_ready(): 
+                    return True
+                else:
+                    if self.isCanceled():
+                        if self.dry_run:
+                            self.exception = "Validation cancelled by user"
+                        else:
+                            self.exception = "Import cancelled by user"
+                        self.cancel()
+                        return False
+                    time.sleep(1)
+                    # set progress 1 % per second first 50 seconds
+                    # second half progress estimation based on max 20min 
+                    if i < 51:
+                        self.setProgress(i)
+                    else:
+                        self.setProgress(50+i/1150.*50.)
+            self.exception = "Failed to import file within one hour, decrease file size"
+        except Exception as e:
+            self.exception =  e
+            return False
+        return True
+        
+
+    def finished(self, result):
+        """
+        This function is automatically called when the task has
+        completed (successfully or not). Result is the return value from self.run
+        """
+        if result:
+            QgsMessageLog.logMessage(
+                'Task "{name}" completed\n'.format(name=self.description()),
+                MESSAGE_CATEGORY, Qgis.Success)
+                    
+            output_path = os.path.dirname(os.environ.get("ETK_DATABASE_PATH"))
+            stdout_files = glob.glob(os.path.join(gettempdir(), 'etk_import_*_stdout.log'))
+            stderr_files = glob.glob(os.path.join(gettempdir(), 'etk_import_*_stderr.log'))
+            
+            # Read the latest stderr file
+            stderr_files.sort(key=lambda f: int(f.split('_')[-2]))
+            if stderr_files:
+                latest_stderr_file = stderr_files[-1]
+                with open(latest_stderr_file, 'r') as f:
+                    self.stderr_content = f.read()
+            else:
+                self.stderr_content = None
+
+            validation_msgs = []
+            updates = []
+
+            def handle_line(l):
+                error = False
+                if l.startswith("VALIDATION"):
+                    validation_msgs.append(l.split("VALIDATION:")[1].strip())
+                elif l.startswith("ERROR"):
+                    validation_msgs.append(l)
+                else:
+                    error = True
+                    QgsMessageLog.logMessage(l, level=Qgis.Info)
+                return error
+            
+            error = False
+            # from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
+            if  'successfully' in self.stderr_content:
+                if self.dry_run:
+                    changes = eval(self.stderr_content.split('\n')[-2].split("validated")[1].strip())
+                else:
+                    changes = eval(self.stderr_content.split('\n')[-2].split("imported")[1].strip())
+            elif 'Traceback' in self.stderr_content:
+                traceback = self.stderr_content
+                error = True
+            else:
+                for l in self.stderr_content.split('\n'):
+                    error = handle_line(l)
+                if error:
+                    traceback = self.stderr_content
+
+
+            if self.backup_path is not None:
+                self.backup_path.unlink()
+
+            if self.dry_run:
+                if error:
+                    # from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
+                    tableDialog = TableDialog(
+                        self,'Validation status',
+                        "Did not validate full file. \n "
+                        "Error occurred that could not be handled by validation \n"
+                        "Try to correct spreadsheet using error information below: \n ",
+                        os.linesep.join(traceback.split('\n'))
+                    )
+                elif len(validation_msgs) > 0:
+                    # len_errors = len(validation_msgs) - 1 
+                    tableDialog = TableDialog(
+                        self,'Validation status',
+                        "Validated file successfully. \n "
+                        "Found errors, correct spreadsheet using error information "
+                        "given below before importing data: \n",
+                        os.linesep.join(validation_msgs)
+                    )
+                else:
+                    tableDialog = TableDialog(
+                        self,'Validation status',
+                        "Validated file successfully. \n"
+                        "No changes to database yet, but number of features to be "
+                        "created or updated if file would be imported are summarized in table.",
+                        changes
+                    )
+                tableDialog.exec_() 
+            else:
+                if error:
+                    tableDialog = TableDialog(
+                        self,'Import status',
+                        "Did not import file successfully. \n "
+                        "Error occurred that could not be handled by Eclair. \n"
+                        "First validate the file, correct spreadsheet using error information  \n"
+                        "given below untill reaching a successful validation before importing data: \n",
+                        os.linesep.join(traceback.split('\n'))
+                    )
+                if len(validation_msgs) > 0:
+                    tableDialog = TableDialog(
+                        self,'Import status',
+                        "Did not import file successfully. \n "
+                        "Import stopped at error. First validate the file, correct spreadsheet using error information "
+                        "given below untill reaching a successful validation before importing data: \n",
+                        os.linesep.join(validation_msgs)
+                    )
+                else:
+                    tableDialog = TableDialog(
+                        self, 'Import status',
+                        'Imported data successfully. \n'
+                        ' Number of features created or updated summarized in table.',
+                        changes 
+                    )
+                tableDialog.exec_()  
+        else:
+            if self.exception is None:
+                QgsMessageLog.logMessage(
+                    'Task "{name}" not successful but without '\
+                    'exception (probably the task was manually '\
+                    'canceled by the user)'.format(
+                        name=self.description()),
+                    MESSAGE_CATEGORY, Qgis.Warning)
+            else:
+                if type(self.exception) == str:
+                    error = self.exception
+                else:
+                    error = self.exception.stderr.decode("utf-8")
+                if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
+                    message_box('Error',f"Error: a target database is not specified yet,"
+                    +" choose an existing or create a new database first.")
+                else:
+                    import_error = error.split('ImportError:')[-1]
+                    if self.dry_run:
+                        message_box('Validation error',f"Error: {import_error}")
+                    else:
+                        message_box('Import error',f"Error: {import_error}")
+
+
+    def cancel(self):
+        QgsMessageLog.logMessage(
+            f"Task {self.description()} was canceled",
+            MESSAGE_CATEGORY, Qgis.Info)
+        super().cancel()
+
+
+
+
+class RunBackgroundTask(QgsTask):
+    def __init__(self, description, function, parent, *args, **kwargs):
+        super().__init__(description, QgsTask.CanCancel)
+        self.function = function
+        self.parent = parent
+        self.args = args
+        self.kwargs = kwargs
+        self.exception = None
+        self.proc = None
+
+    def check_process_ready(self):
+        if self.proc:
+            return self.proc.poll() is not None
+        return False
+
+    def run(self):
+        """Implement heavy lifting.
+        Periodically test for isCanceled() to gracefully abort.
+        Raising exceptions here will crash QGIS, raise them in self.finished instead.
+        """
+        QgsMessageLog.logMessage(f"Started task {self.description()}", MESSAGE_CATEGORY, Qgis.Info)
+        try:
+            self.proc = self.function(*self.args, **self.kwargs)
+            for i in range(3600):
+                # Check if the process is ready
+                if self.check_process_ready(): 
+                    return True
+                else:
+                    if self.isCanceled():
+                        self.cancel()
+                        return False
+                    time.sleep(1)
+                    if i < 51:
+                        self.setProgress(i)
+                    else:
+                        self.setProgress(50+i/1150.*50.)
+            self.exception = f"Failed to complete {self.description()} within one hour."
+        except Exception as e:
+            self.exception =  e
+            return False
+        return True
+
+    def finished(self, result):
+        """
+        This function is automatically called when the task has
+        completed (successfully or not). Result is the return value from self.run
+        """
+        if result:
+            QgsMessageLog.logMessage(
+                f"Task {self.description()} completed",
+                MESSAGE_CATEGORY, Qgis.Success)
+            #TODO would be more clear to implement this in EclairDock, after 
+            # setting self.task, but connect.finished did not work.
+            if "Rasterize emissions" in self.description():
+                if self.parent.load_canvas:
+                    load_rasters_to_canvas(self.kwargs["outputpath"], self.parent.time_threshold)
+            elif self.description() == "Prepare emissions for static visualisation":
+                self.parent.load_join()
+        else:
+            if self.exception is None:
+                QgsMessageLog.logMessage(
+                    f"Task {self.description()} not successful but without "\
+                    'exception (probably the task was manually '\
+                    'canceled by the user)',
+                    MESSAGE_CATEGORY, Qgis.Warning)
+            else:
+                if isinstance(self.exception, str):
+                    error = self.exception
+                else:
+                    error = str(self.exception)
+                message_box('Eclair error', f"Error: {error}")
+
+    def cancel(self):
+        QgsMessageLog.logMessage(
+            f"Task {self.description()} was canceled",
+            MESSAGE_CATEGORY, Qgis.Info)
+        super().cancel()
+
