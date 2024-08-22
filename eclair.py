@@ -74,16 +74,12 @@ if os.name != "nt":
     os.environ["PATH"] += f":{ETK_BINPATH}"
     sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 else:
-    #TODO have to decide on best practice here, when installed through OSGeo4W,
-    # commented lines should be uncommented
-    import platform
-    # OSGEO4W = r"C:\OSGeo4W"
-    # assert os.path.isdir(OSGEO4W), "Directory does not exist: " + OSGEO4W
-    # os.environ['OSGEO4W_ROOT'] = OSGEO4W
-    # os.environ['GDAL_DATA'] = OSGEO4W + r"\share\gdal"
-    # os.environ['PROJ_LIB'] = OSGEO4W + r"\share\proj"
-    # os.environ['PATH'] = OSGEO4W + r"\bin;" + os.environ['PATH']
-    os.environ['PATH'] = os.path.expanduser("~\AppData\Roaming\Python\Python39\Scripts;") + os.environ['PATH']
+    OSGEO4W = r"C:\OSGeo4W"
+    assert os.path.isdir(OSGEO4W), "Directory does not exist: " + OSGEO4W
+    os.environ['OSGEO4W_ROOT'] = OSGEO4W
+    os.environ['GDAL_DATA'] = OSGEO4W + r"\share\gdal"
+    os.environ['PROJ_LIB'] = OSGEO4W + r"\share\proj"
+    os.environ['PATH'] = OSGEO4W + r"\bin;" + os.environ['PATH']
 
 from etk.edb.const import SHEET_NAMES
 from etk.tools.utils import (
@@ -292,9 +288,6 @@ class EclairDock(QDockWidget):
 
     def create_new_database_dialog(self):
         db_path, _ = QFileDialog.getSaveFileName(None, "Create new SQLite database", "", "Database (*.gpkg)")
-        # TODO if user did not write .gpkg in file name, add it?
-        # of could it cause problem if user chooses a name say "db"
-        # and "db" does not exist yet in the directory, but "db.gpkg" does?
         if (db_path == ''): 
             # user cancelled
             message_box('Warning','No *.gpkg file chosen, database not created.')
@@ -845,7 +838,7 @@ class RasterizeDialog(QDialog):
         layout.addLayout(resolution_layout)
 
         date_label = QLabel("If one raster per hour is desired, enter begin and end date for rasters (optional).")
-        # TODO etk now always assumes timezone UTC, is that desired? may be difficult to communicate different timezone
+        # TODO etk now always assumes timezone UTC, could make it user-defined.
         layout.addWidget(date_label)
         date_layout = QHBoxLayout()
         self.date_input = {}
@@ -865,7 +858,6 @@ class RasterizeDialog(QDialog):
         self.setLayout(layout)
 
         # TODO let unit be user defined?
-
         btn_action_run_rasterizer = QPushButton("Create rasters")
         layout.addWidget(btn_action_run_rasterizer)
         btn_action_run_rasterizer.clicked.connect(self.run_rasterizer)
@@ -1305,8 +1297,6 @@ class RunBackgroundTask(QgsTask):
             QgsMessageLog.logMessage(
                 f"Task {self.description()} completed",
                 MESSAGE_CATEGORY, Qgis.Success)
-            #TODO would be more clear to implement this in EclairDock, after 
-            # setting self.task, but connect.finished did not work.
             if "Rasterize emissions" in self.description():
                 if self.parent.load_canvas:
                     load_rasters_to_canvas(self.kwargs["outputpath"], self.parent.time_threshold)
