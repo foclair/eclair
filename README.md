@@ -3,57 +3,12 @@
 *Eclair* is a QGIS plugin, which uses the python module *etk* to structure emission data and store emissions together with geographic information in a database. 
 
 ### Windows installation
-The OSGeo4W installer helps to install the PROJ, GDAL, and GEOS libraries required by ECLAIR.
+The OSGeo4W installer helps to install the PROJ, GDAL, and GEOS libraries required by ECLAIR. Therefore, even if you have QGIS installed already, to make sure Eclair works, follow the installation instructions below.
 
 #### OSGeo4W installation instructions 
-First, download the  [OSGeo4W installer](https://trac.osgeo.org/osgeo4w/), and run it. Select Express Web-GIS Install and click next. In the ‘Select Packages’ list, ensure that GDAL is selected. If any other packages are enabled by default, they are not required by ECLAIR and may be unchecked safely. After clicking next and accepting the license agreements, the packages will be automatically downloaded and installed, after which you may exit the installer.
+First, download the  [OSGeo4W installer](https://trac.osgeo.org/osgeo4w/), and run it. Select Express Web-GIS Install and click next. In the "Coose a download Site" dialog, add the url https://download.osgeo.org/osgeo4w/v2/snapshots/20230428-030718/ as User URL, and select the last download site which was added to the upper list by entering this url. This will ensure that an older version of OSGeo4W is installed, which has a GDAL version that is compatible with the version of Django used by etk. In the ‘Select Packages’ list, ensure that GDAL is selected. If any other packages are enabled by default, they are not required by ECLAIR and may be unchecked safely. After clicking next and accepting the license agreements, the packages will be automatically downloaded and installed, after which you may exit the installer.
 
-#### Install etk and Eclair
-Once OSGeo4W is installed, open the OSGeo4W shell and run 
-```
-pip install -i https://test.pypi.org/simple/ rastafari==0.2.2
-```
-Instructions for installing etk will follow once publicly available. For now, both etk and eclair are located in
-```
-/data/proj9/A-konsult/Västra_Balkan_luftmiljö_2022_2270_10.3/06_Underlag/ECLAIR_Beta_16april
-```
-Copy this directory to a suitable location, and use the command `cd` to go to etk in the OSGeo4W shell, for example:
-```
-cd C:\Users\<your_home>\Desktop\etk
-```
-The OSGeo4W shell should now state that you are located in the right directory, for example `C:\Users\<your_home>\Desktop\etk>`.
-Install etk by:
-```
-pip install .
-```
-If etk is successfully installed, the last line of output should state `Successfully installed (....) etk-0.0.1.dev0 (...)`, where other Python packages used by etk are stated both before and after etk.
-
-Somehow, it could be that OSGeo4W does not copy the sql files in etk. Check this by going to the location where you have installed OSGeo4W, if it is not in C:\):
-```
-cd C:\OSGeo4W\apps\Python39\Lib\site-packages\etk\emissions
-dir
-```
-If there are no sql files, copy them manually
-```
-copy <your_path>\ECLAIR_Beta_16april\etk\src\etk\emissions\*.sql .
-```
-**TODO** this will be fixed automatically in future release. 
-
-
-Now create a folder in your home directory: **TODO** this should not be necessary, but the automatic creation of the folder does not work in Windows yet.
-```
-mkdir C:\Users\<your_home>\.config
-mkdir C:\Users\<your_home>\.config\eclair
-```
-and create a template database, which includes the full database structure, but without any data:
-```
-etk migrate
-```
-You can check whether the database was created, by checking whether a file eclair.gpkg was created:
-```
-dir C:\Users\<your_home>\.config\eclair
-```
-
+#### Install Eclair
 Eclair can either be installed from zip (easier for user not involved in development), or by creating a symbolic link as described in the section 'Development' below (only recommended for developers). To install from zip, open QGIS, go to Plugins > Manage and Install Plugins.. > Install from ZIP. If you get a 'Security warning', click Yes to continue.
 Now Eclair is installed, and a button with 'Eclair!' should have appeared in QGIS. Clicking this button should open a panel below the 'layers' panel, on the left of the user interface.
 
@@ -66,12 +21,11 @@ If the amount of emissions is not known, but the activity of the source is known
 
 #### DB Settings
 Here you choose which database to edit. Every time the plugin is started, a database has to be chosen or created.
-If you receive an error message stating "ModuleNotFoundError: No module named 'etk'", make sure that you opened the version of QGIS connected to your OSGeo4W installation (as QGIS could be installed twice, once as stand-alone and once as part of OSGeo4W). The executable of the program connected to OSGeo4W can be found in `OSGeo4W/bin/qgis-ltr-bin`. Always use this version of QGIS when working with Eclair. 
+If you receive an error message stating "ModuleNotFoundError: No module named 'etk'", make sure that you opened the version of QGIS connected to your OSGeo4W installation (as QGIS could be installed twice, once as stand-alone and once as part of OSGeo4W through the installation guidelines above). The executable of the program connected to OSGeo4W can be found in `OSGeo4W/bin/qgis-ltr-bin`. Always use this version of QGIS when working with Eclair. 
 
-When creating a new database, a coordinate reference system needs to be chosen. **TODO more info here, what is it used for?**
+When creating a new database, a coordinate reference system needs to be chosen. **TODO more info here, explain what it is used for**
 
 #### Import emissions
-**TODO decide where to store templates for users**
 
 Eclair can import four types of sources:
 - point sources,
