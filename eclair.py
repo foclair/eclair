@@ -70,8 +70,8 @@ import processing
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 if os.name != "nt":
-    ETK_BINPATH = os.path.expanduser("~/.local/bin")
-    os.environ["PATH"] += f":{ETK_BINPATH}"
+    CETK_BINPATH = os.path.expanduser("~/.local/bin")
+    os.environ["PATH"] += f":{CETK_BINPATH}"
     sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 else:
     OSGEO4W = r"C:\OSGeo4W"
@@ -83,15 +83,15 @@ else:
 
 
 try: 
-    from etk.edb.const import SHEET_NAMES
+    from cetk.edb.const import SHEET_NAMES
 except:
     if QMessageBox.question(None, "Eclair dependencies not installed",
               "Do you want to install missing python modules? \r\n"
               "QGIS will be non-responsive for a while.",
                QMessageBox.Ok | QMessageBox.Cancel) == QMessageBox.Ok:
         try:
-            subprocess.check_call(["python", "-m", "pip", "install", "-i", "https://test.pypi.org/simple/","etk"])
-            from etk.edb.const import SHEET_NAMES
+            subprocess.check_call(["python", "-m", "pip", "install", "-i", "https://test.pypi.org/simple/","cetk"])
+            from cetk.edb.const import SHEET_NAMES
             QMessageBox.information(None, "Packages successfully installed",
                                     "To make all parts of the plugin work it is recommended to restart your QGIS-session.")
         except Exception as e:
@@ -102,12 +102,12 @@ except:
                                     "See 'General' tab in 'Log Messages' panel for details.\n")
     else:
         QMessageBox.information(None,
-                                "Information", "Packages not installed. Eclair will not function unless etk is installed manually, see https://github.com/foclair/etk for installation instructions.")
+                                "Information", "Packages not installed. Eclair will not function unless cetk is installed manually, see https://github.com/foclair/cetk for installation instructions.")
 
 
 
 
-from etk.tools.utils import (
+from cetk.tools.utils import (
     CalledProcessError, 
     create_from_template, 
     get_template_db,
@@ -119,7 +119,7 @@ from etk.tools.utils import (
     run_rasterize_emissions,
     run_get_settings
 )
-from etk.db import run_migrate
+from cetk.db import run_migrate
         
 class Eclair(QWidget):
     def __init__(self, iface):
@@ -306,7 +306,7 @@ class EclairDock(QDockWidget):
         layout_visualize.addLayout(static_sources_layout)
 
     def update_db_label(self):
-        db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+        db_path = os.environ.get("CETK_DATABASE_PATH", "Database not set yet.")
         self.db_label.setText(f"Eclair is currently connected to database:\n {os.path.basename(db_path)}")
         self.db_label.setToolTip(str(db_path))
 
@@ -316,7 +316,7 @@ class EclairDock(QDockWidget):
             # user cancelled
             message_box('Warning','No file chosen, database not configured.')
         else:
-            os.environ["ETK_DATABASE_PATH"] = db_path
+            os.environ["CETK_DATABASE_PATH"] = db_path
             self.update_db_label()
             message_box('Load database',f"Database succesfully chosen database {db_path}.")
 
@@ -329,7 +329,7 @@ class EclairDock(QDockWidget):
             try:
                 epsg = self.show_srid_dialog()
                 proc = create_from_template(db_path)
-                os.environ["ETK_DATABASE_PATH"] = db_path
+                os.environ["CETK_DATABASE_PATH"] = db_path
                 if epsg is not None:
                     set_settings_srid(epsg)
                 self.update_db_label()
@@ -339,7 +339,7 @@ class EclairDock(QDockWidget):
                 message_box('Create database error',f"Error: {error}")
 
     def edit_db_settings(self):
-        # TODO, create command in etk.tools.utils that fixes this
+        # TODO, create command in cetk.tools.utils that fixes this
         pass
     
     def import_sources(self):
@@ -405,7 +405,7 @@ class EclairDock(QDockWidget):
 
     def create_emission_table(self):
         #TODO catch exception if database does not have any emissions imported yet       
-        db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+        db_path = os.environ.get("CETK_DATABASE_PATH", "Database not set yet.")
         self.task = RunBackgroundTask(
                 description="Prepare emissions for static visualisation",
                 function=run_update_emission_tables,
@@ -425,7 +425,7 @@ class EclairDock(QDockWidget):
             if filename and not filename.endswith('.xlsx'):
                 filename += '.xlsx'
             try:
-                self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+                self.db_path = os.environ.get("CETK_DATABASE_PATH", "Database not set yet.")
                 # Load codesets table
                 connection = sqlite3.connect(self.db_path)
                 cursor = connection.cursor()
@@ -523,7 +523,7 @@ class EclairDock(QDockWidget):
 
     def load_joined_gridsource_canvas(self):
         try:
-            self.db_path = os.environ.get("ETK_DATABASE_PATH", None)
+            self.db_path = os.environ.get("CETK_DATABASE_PATH", None)
             if self.db_path is None:
                 message_box('Load GridSource error','Database not set yet, connect to '
                 + ' an existing database or create a new one.')
@@ -635,7 +635,7 @@ class EclairDock(QDockWidget):
         self.load_interactive()
 
     def load_join(self):
-        self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+        self.db_path = os.environ.get("CETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
             return 
@@ -701,7 +701,7 @@ class EclairDock(QDockWidget):
 
 
     def load_interactive(self):
-        self.db_path = os.environ.get("ETK_DATABASE_PATH", "Database not set yet.")
+        self.db_path = os.environ.get("CETK_DATABASE_PATH", "Database not set yet.")
         if self.db_path == "Database not set yet.":
             message_box('Warning','Cannot load layer, database not chosen yet.')
             return 
@@ -872,7 +872,7 @@ class RasterizeDialog(QDialog):
         layout.addLayout(resolution_layout)
 
         date_label = QLabel("If one raster per hour is desired, enter begin and end date for rasters (optional).")
-        # TODO etk now always assumes timezone UTC, could make it user-defined.
+        # TODO cetk now always assumes timezone UTC, could make it user-defined.
         layout.addWidget(date_label)
         date_layout = QHBoxLayout()
         self.date_input = {}
@@ -932,10 +932,10 @@ class RasterizeDialog(QDialog):
         elif self.date[1] != '':
             message_box("Rasterize error", "If end date is specified, begin date has to be specified too.")
             return
-        # below is now organised in etk adjust extent    
+        # below is now organised in cetk adjust extent    
         # self.nx = ceil((self.extent[2] - self.extent[0]) / resolution[0]) # always at least cover provided extent
         # self.ny = ceil((self.extent[3] - self.extent[1]) / resolution[1]) # then nx, ny cannot be 0 either.
-        # convert extent to format for etk --rasterize command "x1,y1,x2,y2"
+        # convert extent to format for cetk --rasterize command "x1,y1,x2,y2"
         # self.extent = str(self.extent[0])+","+str(self.extent[1])+","+str(self.extent[0]+self.nx*resolution[0])+","+str(self.extent[1]+self.ny*resolution[1])
         # message_box("info",self.extent)
         # Store the state of the checkbox
@@ -1146,9 +1146,9 @@ class RunImportTask(QgsTask):
                 'Task "{name}" completed\n'.format(name=self.description()),
                 MESSAGE_CATEGORY, Qgis.Success)
                     
-            output_path = os.path.dirname(os.environ.get("ETK_DATABASE_PATH"))
-            stdout_files = glob.glob(os.path.join(gettempdir(), 'etk_import_*_stdout.log'))
-            stderr_files = glob.glob(os.path.join(gettempdir(), 'etk_import_*_stderr.log'))
+            output_path = os.path.dirname(os.environ.get("CETK_DATABASE_PATH"))
+            stdout_files = glob.glob(os.path.join(gettempdir(), 'cetk_import_*_stdout.log'))
+            stderr_files = glob.glob(os.path.join(gettempdir(), 'cetk_import_*_stderr.log'))
             
             # Read the latest stderr file
             stderr_files.sort(key=lambda f: int(f.split('_')[-2]))
@@ -1260,7 +1260,7 @@ class RunImportTask(QgsTask):
                     error = self.exception
                 else:
                     error = self.exception.stderr.decode("utf-8")
-                if "Database unspecified does not exist, first run 'etk create' or 'etk migrate'" in error:
+                if "Database unspecified does not exist, first run 'cetk create' or 'cetk migrate'" in error:
                     message_box('Error',f"Error: a target database is not specified yet,"
                     +" choose an existing or create a new database first.")
                 else:

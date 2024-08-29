@@ -1,12 +1,12 @@
 # Eclair - Emission CompiLation for AIR quality
 
-*Eclair* is a QGIS plugin, which uses the python module *etk* to structure emission data and store emissions together with geographic information in a database. 
+*Eclair* is a QGIS plugin, which uses the python module *cetk* to structure emission data and store emissions together with geographic information in a database. 
 
 ### Windows installation
 The OSGeo4W installer helps to install the PROJ, GDAL, and GEOS libraries required by ECLAIR. Therefore, even if you have QGIS installed already, to make sure Eclair works, follow the installation instructions below.
 
 #### OSGeo4W installation instructions 
-First, download the  [OSGeo4W installer](https://trac.osgeo.org/osgeo4w/), and run it. Select Express Web-GIS Install and click next. In the "Choose a download Site" dialog, add the url https://download.osgeo.org/osgeo4w/v2/snapshots/20230428-030718/ as User URL, and select the last download site which was added to the upper list by entering this url. This will ensure that an older version of OSGeo4W is installed, which has a GDAL version that is compatible with the version of Django used by etk. In the ‘Select Packages’ list, ensure that GDAL is selected. If any other packages are enabled by default, they are not required by ECLAIR and may be unchecked safely. After clicking next and accepting the license agreements, the packages will be automatically downloaded and installed, after which you may exit the installer.
+First, download the  [OSGeo4W installer](https://trac.osgeo.org/osgeo4w/), and run it. Select Express Web-GIS Install and click next. In the "Choose a download Site" dialog, add the url https://download.osgeo.org/osgeo4w/v2/snapshots/20230428-030718/ as User URL, and select the last download site which was added to the upper list by entering this url. This will ensure that an older version of OSGeo4W is installed, which has a GDAL version that is compatible with the version of Django used by cetk. In the ‘Select Packages’ list, ensure that GDAL is selected. If any other packages are enabled by default, they are not required by ECLAIR and may be unchecked safely. After clicking next and accepting the license agreements, the packages will be automatically downloaded and installed, after which you may exit the installer.
 
 #### Install Eclair
 Eclair can either be installed from zip (easier for user not involved in development), or by creating a symbolic link as described in the section 'Development' below (only recommended for developers). To install from zip, open QGIS, go to Plugins > Manage and Install Plugins.. > Install from ZIP. If you get a 'Security warning', click Yes to continue.
@@ -21,7 +21,7 @@ If the amount of emissions is not known, but the activity of the source is known
 
 #### DB Settings
 Here you choose which database to edit. Every time the plugin is started, a database has to be chosen or created.
-If you receive an error message stating "ModuleNotFoundError: No module named 'etk'", make sure that you opened the version of QGIS connected to your OSGeo4W installation (as QGIS could be installed twice, once as stand-alone and once as part of OSGeo4W through the installation guidelines above). The executable of the program connected to OSGeo4W can be found in `OSGeo4W/bin/qgis-ltr-bin`. Always use this version of QGIS when working with Eclair. 
+If you receive an error message stating "ModuleNotFoundError: No module named 'cetk'", make sure that you opened the version of QGIS connected to your OSGeo4W installation (as QGIS could be installed twice, once as stand-alone and once as part of OSGeo4W through the installation guidelines above). The executable of the program connected to OSGeo4W can be found in `OSGeo4W/bin/qgis-ltr-bin`. Always use this version of QGIS when working with Eclair. 
 
 When creating a new database, a coordinate reference system needs to be chosen. **TODO more info here, explain what it is used for**
 
@@ -35,7 +35,7 @@ Eclair can import four types of sources:
 
 Template files that show what structure import files should have are located in; 
 
-[https://github.com/foclair/etk/tree/develop/tests/edb/data](https://github.com/foclair/etk/tree/develop/tests/edb/data)
+[https://github.com/foclair/cetk/tree/develop/tests/edb/data](https://github.com/foclair/cetk/tree/develop/tests/edb/data)
 
 The import files are Excel files which can have a number of sheets. 
 Codesets (such as GNFR, NFR and SNAP) and their activity codes (such as 1.A.3.b) are set in sheets
@@ -129,7 +129,7 @@ Removing sources using QGIS functionality to edit layers is currently not possib
 
 ## Development
 
-In order to use, may have to create your own venv, install all requirements and etk (which is not yet included in requirements.txt).
+In order to use, may have to create your own venv, install all requirements and cetk (which is not yet included in requirements.txt).
 If experience problems with template database, run following in QGIS Python console to find where template database is located:
 
 ```

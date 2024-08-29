@@ -17,7 +17,7 @@ defusedxml==0.7.1
 django_dynamic_fixture==4.0.1
 dl==0.1.0
 docutils==0.16
-cetk
+ccetk
 fastparquet==2024.5.0
 Foundation==0.1.0a0.dev1
 fsspec==2024.6.1
