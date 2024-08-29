@@ -90,7 +90,7 @@ except:
               "QGIS will be non-responsive for a while.",
                QMessageBox.Ok | QMessageBox.Cancel) == QMessageBox.Ok:
         try:
-            subprocess.check_call(["python", "-m", "pip", "install", "-i", "https://test.pypi.org/simple/","cetk"])
+            subprocess.check_call(["python", "-m", "pip", "install","cetk"])
             from cetk.edb.const import SHEET_NAMES
             QMessageBox.information(None, "Packages successfully installed",
                                     "To make all parts of the plugin work it is recommended to restart your QGIS-session.")
