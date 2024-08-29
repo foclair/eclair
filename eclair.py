@@ -533,7 +533,7 @@ class EclairDock(QDockWidget):
             cursor.execute("SELECT id, name FROM edb_gridsource")
             result = cursor.fetchall()
             if len(result) > 0:
-                timestamp = datetime.datetime.now().strftime("%m-%d-%Y_%H:%M")
+                timestamp = datetime.datetime.now().strftime("%m-%d-%Y_%H-%M")
                 source_id, source_name = zip(*[(x[0], x[1]) for x in result])
                 cursor.execute("SELECT source_id, raster FROM edb_gridsourcesubstance")
                 result = cursor.fetchall()
