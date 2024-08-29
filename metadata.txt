@@ -8,12 +8,12 @@ qgisMinimumVersion=3.0
 description=This plugin compiles emission data for air quality. Data can be imported, edited and exported.
 version=0.0
 author=SMHI FO Luft
-email=eef.vandongen@smhi.se
+email=foluftadmin@smhi.se
 
-about=Eclair compiles emission data for air quality. Data is imported into an SQLite database in the correct format to be reported to EMEP, LCS, CLRTAP and to form a basis for dispersion modelling. Once imported, data can be edited and exported.
+about=Eclair compiles emission data for air quality. Data is imported into an SQLite database. Once imported, data can be edited, visualized, aggregated, rasterized and exported.
 
-tracker=https://git.smhi.se/foclair/etk/-/issues
-repository=https://git.smhi.se/foclair/etk/
+tracker=https://github.com/foclair/eclair/-/issues
+repository=https://github.com/foclair/eclair
 # End of mandatory metadata
 
 # Recommended items:
@@ -25,11 +25,11 @@ hasProcessingProvider=no
 # Tags are comma separated with spaces allowed
 tags=python
 
-homepage=http://homepage
+homepage=https://github.com/foclair/eclair
 category=Plugins
-icon=icon.png # this is the logo shown in the plugin download manager, not in the toolbar!
+# icon=icon.png # this is the logo shown in the plugin download manager, not in the toolbar!
 # experimental flag
-experimental=False
+experimental=True
 
 # deprecated flag (applies to the whole plugin, not just a single version)
 deprecated=False
