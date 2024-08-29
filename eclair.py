@@ -81,10 +81,36 @@ else:
     os.environ['PROJ_LIB'] = OSGEO4W + r"\share\proj"
     os.environ['PATH'] = OSGEO4W + r"\bin;" + os.environ['PATH']
 
-from etk.edb.const import SHEET_NAMES
+
+try: 
+    from etk.edb.const import SHEET_NAMES
+except:
+    if QMessageBox.question(None, "Eclair dependencies not installed",
+              "Do you want to install missing python modules? \r\n"
+              "QGIS will be non-responsive for a while.",
+               QMessageBox.Ok | QMessageBox.Cancel) == QMessageBox.Ok:
+        try:
+            subprocess.check_call(["python", "-m", "pip", "install", "-i", "https://test.pypi.org/simple/","etk"])
+            from etk.edb.const import SHEET_NAMES
+            QMessageBox.information(None, "Packages successfully installed",
+                                    "To make all parts of the plugin work it is recommended to restart your QGIS-session.")
+        except Exception as e:
+            error = e.stderr.decode("utf-8")    
+            QgsMessageLog.logMessage(error, level=Qgis.Warning)
+            QMessageBox.information(None, "An error occurred",
+                                    "Eclair couldn't install Python packages!\n"
+                                    "See 'General' tab in 'Log Messages' panel for details.\n")
+    else:
+        QMessageBox.information(None,
+                                "Information", "Packages not installed. Eclair will not function unless etk is installed manually, see https://github.com/foclair/etk for installation instructions.")
+
+
+
+
 from etk.tools.utils import (
     CalledProcessError, 
     create_from_template, 
+    get_template_db,
     set_settings_srid,
     run_import,
     run_export,
@@ -93,6 +119,7 @@ from etk.tools.utils import (
     run_rasterize_emissions,
     run_get_settings
 )
+from etk.db import run_migrate
         
 class Eclair(QWidget):
     def __init__(self, iface):
@@ -125,6 +152,13 @@ class Eclair(QWidget):
 class EclairDock(QDockWidget):
     def __init__(self, parent):
         super().__init__("ECLAIR", parent)
+
+        # Check if template db exists, if not create by migrate
+        if not os.path.exists(get_template_db()):
+            os.makedirs(os.path.dirname(get_template_db()), exist_ok=True)
+            run_migrate()
+
+
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         # Create a main widget for the dock widget
         self.main_widget = QWidget(self)
@@ -1321,4 +1355,3 @@ class RunBackgroundTask(QgsTask):
             f"Task {self.description()} was canceled",
             MESSAGE_CATEGORY, Qgis.Info)
         super().cancel()
-

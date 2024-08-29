@@ -1,4 +1,3 @@
--i https://test.pypi.org/simple/
 AppKit==0.2.8
 beautifulsoup4==4.12.3
 boto3==1.35.3
@@ -18,7 +17,7 @@ defusedxml==0.7.1
 django_dynamic_fixture==4.0.1
 dl==0.1.0
 docutils==0.16
-etk==0.0.2.dev0
+cetk
 fastparquet==2024.5.0
 Foundation==0.1.0a0.dev1
 fsspec==2024.6.1

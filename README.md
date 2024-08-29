@@ -6,7 +6,7 @@
 The OSGeo4W installer helps to install the PROJ, GDAL, and GEOS libraries required by ECLAIR. Therefore, even if you have QGIS installed already, to make sure Eclair works, follow the installation instructions below.
 
 #### OSGeo4W installation instructions 
-First, download the  [OSGeo4W installer](https://trac.osgeo.org/osgeo4w/), and run it. Select Express Web-GIS Install and click next. In the "Coose a download Site" dialog, add the url https://download.osgeo.org/osgeo4w/v2/snapshots/20230428-030718/ as User URL, and select the last download site which was added to the upper list by entering this url. This will ensure that an older version of OSGeo4W is installed, which has a GDAL version that is compatible with the version of Django used by etk. In the ‘Select Packages’ list, ensure that GDAL is selected. If any other packages are enabled by default, they are not required by ECLAIR and may be unchecked safely. After clicking next and accepting the license agreements, the packages will be automatically downloaded and installed, after which you may exit the installer.
+First, download the  [OSGeo4W installer](https://trac.osgeo.org/osgeo4w/), and run it. Select Express Web-GIS Install and click next. In the "Choose a download Site" dialog, add the url https://download.osgeo.org/osgeo4w/v2/snapshots/20230428-030718/ as User URL, and select the last download site which was added to the upper list by entering this url. This will ensure that an older version of OSGeo4W is installed, which has a GDAL version that is compatible with the version of Django used by etk. In the ‘Select Packages’ list, ensure that GDAL is selected. If any other packages are enabled by default, they are not required by ECLAIR and may be unchecked safely. After clicking next and accepting the license agreements, the packages will be automatically downloaded and installed, after which you may exit the installer.
 
 #### Install Eclair
 Eclair can either be installed from zip (easier for user not involved in development), or by creating a symbolic link as described in the section 'Development' below (only recommended for developers). To install from zip, open QGIS, go to Plugins > Manage and Install Plugins.. > Install from ZIP. If you get a 'Security warning', click Yes to continue.
@@ -33,10 +33,10 @@ Eclair can import four types of sources:
 - grid sources,
 - road sources.
 
-Template files that show what structure import files should have are located in 
-```
-/data/proj9/A-konsult/Västra_Balkan_luftmiljö_2022_2270_10.3/06_Underlag/ETK_Templates
-```
+Template files that show what structure import files should have are located in; 
+
+[https://github.com/foclair/etk/tree/develop/tests/edb/data](https://github.com/foclair/etk/tree/develop/tests/edb/data)
+
 The import files are Excel files which can have a number of sheets. 
 Codesets (such as GNFR, NFR and SNAP) and their activity codes (such as 1.A.3.b) are set in sheets
 "CodeSet" and "ActivityCode". These apply to all source types.
@@ -143,7 +143,5 @@ DATABASE_DIR = Path(
 
 Development is best done through plugin-reloader. Create a symlink to this directory at the location where QGIS finds plugins. For Windows eg
 ```
-mklink /D C:\Users\eefva\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\minimal-eclair C:\Users\eefva\Projects\minimal-eclair 
-mklink /D C:\OSGeo4W\apps\qgis\plugins\minimal-eclair %UserProfile%\Projects\minimal-eclair
+mklink /D C:\OSGeo4W\apps\qgis\plugins\eclair %UserProfile%\eclair
 ```
-Not 100% which one worked, have to retry upon new installation.
