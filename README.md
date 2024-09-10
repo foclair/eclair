@@ -33,9 +33,7 @@ Eclair can import four types of sources:
 - grid sources,
 - road sources.
 
-Template files that show what structure import files should have are located in; 
-
-[https://github.com/foclair/cetk/tree/develop/tests/edb/data](https://github.com/foclair/cetk/tree/develop/tests/edb/data)
+Template files that show what structure import files should have are located [here](https://github.com/foclair/eclair/tree/develop/template).
 
 The import files are Excel files which can have a number of sheets. 
 Codesets (such as GNFR, NFR and SNAP) and their activity codes (such as 1.A.3.b) are set in sheets
