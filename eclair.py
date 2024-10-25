@@ -63,25 +63,6 @@ import json
 from tempfile import NamedTemporaryFile, gettempdir
 from osgeo import gdal
 
-import sqlite3
-import rasterio
-
-import processing
-from concurrent.futures import ThreadPoolExecutor, as_completed
-
-if os.name != "nt":
-    CETK_BINPATH = os.path.expanduser("~/.local/bin")
-    os.environ["PATH"] += f":{CETK_BINPATH}"
-    sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
-else:
-    OSGEO4W = r"C:\OSGeo4W"
-    assert os.path.isdir(OSGEO4W), "Directory does not exist: " + OSGEO4W
-    os.environ['OSGEO4W_ROOT'] = OSGEO4W
-    os.environ['GDAL_DATA'] = OSGEO4W + r"\share\gdal"
-    os.environ['PROJ_LIB'] = OSGEO4W + r"\share\proj"
-    os.environ['PATH'] = OSGEO4W + r"\bin;" + os.environ['PATH']
-
-
 try: 
     from cetk.edb.const import SHEET_NAMES
 except:
@@ -103,6 +84,27 @@ except:
     else:
         QMessageBox.information(None,
                                 "Information", "Packages not installed. Eclair will not function unless cetk is installed manually, see https://github.com/foclair/cetk for installation instructions.")
+
+
+
+import sqlite3
+import rasterio
+
+import processing
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+if os.name != "nt":
+    CETK_BINPATH = os.path.expanduser("~/.local/bin")
+    os.environ["PATH"] += f":{CETK_BINPATH}"
+    sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
+else:
+    OSGEO4W = r"C:\OSGeo4W"
+    assert os.path.isdir(OSGEO4W), "Directory does not exist: " + OSGEO4W
+    os.environ['OSGEO4W_ROOT'] = OSGEO4W
+    os.environ['GDAL_DATA'] = OSGEO4W + r"\share\gdal"
+    os.environ['PROJ_LIB'] = OSGEO4W + r"\share\proj"
+    os.environ['PATH'] = OSGEO4W + r"\bin;" + os.environ['PATH']
+
 
 
 
