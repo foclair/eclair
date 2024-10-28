@@ -12,7 +12,7 @@ email=foluftadmin@smhi.se
 
 about=Eclair compiles emission data for air quality. Data is imported into an SQLite database. Once imported, data can be edited, visualized, aggregated, rasterized and exported.
 
-tracker=https://github.com/foclair/eclair/-/issues
+tracker=https://github.com/foclair/eclair/issues
 repository=https://github.com/foclair/eclair
 # End of mandatory metadata
 
