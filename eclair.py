@@ -119,7 +119,8 @@ from cetk.tools.utils import (
     run_update_emission_tables,
     run_aggregate_emissions, 
     run_rasterize_emissions,
-    run_get_settings
+    run_get_settings,
+    run_delete_sources
 )
 from cetk.db import run_migrate
         
@@ -183,7 +184,7 @@ class EclairDock(QDockWidget):
         # Add tabs to the tab widget
         self.tab_widget.addTab(self.tab_db, "DB Settings")
         self.tab_widget.addTab(self.tab_import, "Import")
-        # self.tab_widget.addTab(self.tab_edit, "Edit")
+        self.tab_widget.addTab(self.tab_edit, "Edit")
         self.tab_widget.addTab(self.tab_export, "Export")
         self.tab_widget.addTab(self.tab_calculate, "Analyse")
         self.tab_widget.addTab(self.tab_visualize, "Load Layers")
@@ -225,16 +226,15 @@ class EclairDock(QDockWidget):
         layout_import.addWidget(btn_action_import_sources)
         btn_action_import_sources.clicked.connect(self.import_sources)
 
-        #TODO
         # Edit
-        # layout_edit = QVBoxLayout()
-        # layout_edit.setAlignment(Qt.AlignTop)
-        # self.tab_edit.setLayout(layout_edit)
-        # label = QLabel("Edit or remove data.", self.tab_edit)
-        # layout_edit.addWidget(label)
-        # btn_action_edit = QPushButton(" Edit data", self.tab_edit)
-        # btn_action_edit.setFont(italic_font)
-        # layout_edit.addWidget(btn_action_edit)
+        layout_edit = QVBoxLayout()
+        layout_edit.setAlignment(Qt.AlignTop)
+        self.tab_edit.setLayout(layout_edit)
+        label = QLabel("Edit or remove data.", self.tab_edit)
+        layout_edit.addWidget(label)
+        btn_action_delete_sources = QPushButton("Delete sources", self.tab_edit)
+        layout_edit.addWidget(btn_action_delete_sources)
+        btn_action_delete_sources.clicked.connect(self.delete_sources)
 
         # Export
         layout_export = QVBoxLayout()
@@ -386,6 +386,10 @@ class EclairDock(QDockWidget):
             # user cancelled
             message_box('Import error','No file chosen, no data imported.')
 
+    def delete_sources(self):
+        
+        stdout, stderr = run_delete_sources('point',[16,17])
+        message_box('Delete sources',str(stdout)+str(stderr))
 
 
     def export_dialog(self):
