@@ -1288,7 +1288,7 @@ class RunImportTask(QgsTask):
                         "given below untill reaching a successful validation before importing data: \n",
                         os.linesep.join(traceback.split('\n'))
                     )
-                if len(validation_msgs) > 0:
+                elif len(validation_msgs) > 0:
                     tableDialog = TableDialog(
                         self,'Import status',
                         "Did not import file successfully. \n "
