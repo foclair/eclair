@@ -230,9 +230,10 @@ class EclairDock(QDockWidget):
         layout_edit = QVBoxLayout()
         layout_edit.setAlignment(Qt.AlignTop)
         self.tab_edit.setLayout(layout_edit)
-        label = QLabel("Edit or remove data.", self.tab_edit)
+        label = QLabel("Edit data using QGIS functionality, or delete selected sources "
+        "using button below.", self.tab_edit)
         layout_edit.addWidget(label)
-        btn_action_delete_sources = QPushButton("Delete sources", self.tab_edit)
+        btn_action_delete_sources = QPushButton("Delete selected sources", self.tab_edit)
         layout_edit.addWidget(btn_action_delete_sources)
         btn_action_delete_sources.clicked.connect(self.delete_sources)
 
@@ -374,8 +375,6 @@ class EclairDock(QDockWidget):
                     return
                 sheets = SHEET_NAMES
             
-            # from qgis.PyQt.QtCore import pyqtRemoveInputHook
-            # pyqtRemoveInputHook()
             if self.dry_run:
                 description = "Eclair data validation"
             else:
@@ -387,10 +386,62 @@ class EclairDock(QDockWidget):
             message_box('Import error','No file chosen, no data imported.')
 
     def delete_sources(self):
+        # Get the active layer 
+        from qgis.core import QgsMapLayer
+        layer = iface.activeLayer()
+       
+        # Ensure the layer is a vector layer
+        if layer is None or not isinstance(layer, QgsMapLayer) or layer.type() != QgsMapLayer.VectorLayer:
+            message_box('Delete sources',"No vector layer selected yet. "
+            "Make sure the desired layer is loaded through 'Load Layers' "
+            "'Load source geometries without emissions (dynamic)'. "
+            "Then select the layer in the Layers panel and use QGIS tool"
+            "'Select Features by Area or Single Click'."
+            "Once features are selected, you can delete them using this button."
+            )
+            return
         
-        stdout, stderr = run_delete_sources('point',[16,17])
-        message_box('Delete sources',str(stdout)+str(stderr))
+        # Ensure layer represents sources in database
+        db_path = os.environ.get("CETK_DATABASE_PATH")
+        db_name = os.path.basename(db_path).split('.')[0]
+        sourcetypes = ["PointSource", "AreaSource", "RoadSource", "GridSource"]
+        layer_names = [db_name+"-"+source for source in sourcetypes]
+        if layer.name() not in layer_names:
+            message_box('Delete sources',"The selected vector layer is not a dynamic "
+            "emission layer loaded by Eclair. Create such a layer using the 'Load Layers "
+            "panel before deleting sources."
+            )
+            return
+        
+        sourcetype = layer.name().split('-')[-1]
+        # rm 'Source' and turn to lower case, as expected by cetk
+        short_sourcetype = sourcetype[:-6].lower()
 
+        selected_features = layer.selectedFeatures()
+        if selected_features:
+            # Create a QMessageBox instance
+            msg_box = QMessageBox()
+            msg_box.setIcon(QMessageBox.Question)
+            msg_box.setWindowTitle("Delete sources")
+            msg_box.setText(
+                f"Are you sure you want to delete {len(selected_features)} features?"
+            )
+            msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            response = msg_box.exec()
+            if response == QMessageBox.Yes:
+                feature_ids = [feat.id() for feat in selected_features]
+                stdout, stderr = run_delete_sources(short_sourcetype,feature_ids)
+                if "Successfully" in stdout.decode("utf-8"):
+                    message_box('Delete sources',stdout.decode("utf-8"))
+                else:
+                    message_box('Delete sources',f"Something went wrong, error info {stderr.decode('utf-8')}")
+        else:
+            message_box('Delete sources',"No features selected. "
+            "Make sure the desired layer is loaded through 'Load Layers' "
+            "'Load source geometries without emissions (dynamic)'. "
+            "Then select the layer in the Layers panel and use QGIS tool"
+            "'Select Features by Area or Single Click'."
+            "Once features are selected, you can delete them using this button.")
 
     def export_dialog(self):
         filename, _ = QFileDialog.getSaveFileName(None, "Choose filename for exported emissions", "", "(*.xlsx)")
@@ -1180,7 +1231,7 @@ class RunImportTask(QgsTask):
                 return error
             
             error = False
-            # from qgis.PyQt.QtCore import pyqtRemoveInputHook;pyqtRemoveInputHook();breakpoint()
+            
             if  'successfully' in self.stderr_content:
                 if self.dry_run:
                     changes = eval(self.stderr_content.split('\n')[-2].split("validated")[1].strip())
@@ -1237,7 +1288,7 @@ class RunImportTask(QgsTask):
                         "given below untill reaching a successful validation before importing data: \n",
                         os.linesep.join(traceback.split('\n'))
                     )
-                if len(validation_msgs) > 0:
+                elif len(validation_msgs) > 0:
                     tableDialog = TableDialog(
                         self,'Import status',
                         "Did not import file successfully. \n "
