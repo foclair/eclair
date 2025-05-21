@@ -161,7 +161,6 @@ class EclairDock(QDockWidget):
             os.makedirs(os.path.dirname(get_template_db()), exist_ok=True)
             run_migrate()
 
-
         self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         # Create a main widget for the dock widget
         self.main_widget = QWidget(self)
@@ -309,9 +308,17 @@ class EclairDock(QDockWidget):
         layout_visualize.addLayout(static_sources_layout)
 
     def update_db_label(self):
+        project = QgsProject.instance()
         db_path = os.environ.get("CETK_DATABASE_PATH", "Database not set yet.")
+        # check if QGIS project has database file, if so we load it
+        # FIXME: it seems that the project variables that we store are kept when creating
+        # an empty project, which may be confusing
+        if db_path == "Database not set yet.":
+            db_path, has_db = project.readEntry("eclair","database", "Database not set yet.")
+            os.environ["CETK_DATABASE_PATH"] = db_path
         self.db_label.setText(f"Eclair is currently connected to database:\n {os.path.basename(db_path)}")
         self.db_label.setToolTip(str(db_path))
+        project.writeEntry("eclair", "database", db_path )
 
     def load_existing_database_dialog(self):
         db_path, _ = QFileDialog.getOpenFileName(self.tab_db, "Open SQLite database", "", "Database (*.gpkg)")
