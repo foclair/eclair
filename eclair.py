@@ -160,6 +160,14 @@ from cetk.tools.utils import (
 from cetk.db import run_migrate
 
 
+def has_db():
+    db_str = os.environ.get("CETK_DATABASE_PATH")
+    if db_str == "Database not set yet." or db_str == "":
+        return False
+    else:
+        return True
+
+
 class Eclair(QWidget):
     def __init__(self, iface):
         super(Eclair, self).__init__()
@@ -563,22 +571,25 @@ class EclairDock(QDockWidget):
             )
 
     def export_dialog(self):
-        filename, _ = QFileDialog.getSaveFileName(
-            None, "Choose filename for exported emissions", "", "(*.xlsx)"
-        )
-        if filename == "":
-            # user cancelled
-            message_box("Warning", "No *.xlsx file chosen, emissions not exported.")
+        if not has_db():
+            message_box("Error", "You have no database loaded.")
         else:
-            if filename and not filename.endswith(".xlsx"):
-                filename += ".xlsx"
-            self.task = RunBackgroundTask(
-                description="Export data",
-                function=run_export,
-                parent=self,
-                filename=filename,
+            filename, _ = QFileDialog.getSaveFileName(
+                None, "Choose filename for exported emissions", "", "(*.xlsx)"
             )
-            QgsApplication.taskManager().addTask(self.task)
+            if filename == "":
+                # user cancelled
+                message_box("Warning", "No *.xlsx file chosen, emissions not exported.")
+            else:
+                if filename and not filename.endswith(".xlsx"):
+                    filename += ".xlsx"
+                self.task = RunBackgroundTask(
+                    description="Export data",
+                    function=run_export,
+                    parent=self,
+                    filename=filename,
+                )
+                QgsApplication.taskManager().addTask(self.task)
 
     def create_emission_table(self):
         # TODO catch exception if database does not have any emissions imported yet
@@ -593,111 +604,123 @@ class EclairDock(QDockWidget):
         QgsApplication.taskManager().addTask(self.task)
 
     def aggregate_emissions_dialog(self):
-        filename, _ = QFileDialog.getSaveFileName(
-            None, "Choose filename for aggregated emissions table", "", "(*.xlsx)"
-        )
-        if filename == "":
-            # user cancelled
-            message_box("Warning", "No file chosen, aggregated table not created.")
+        if not has_db():
+            message_box("Error", "You have no database loaded.")
         else:
-            if filename and not filename.endswith(".xlsx"):
-                filename += ".xlsx"
-            try:
-                self.db_path = os.environ.get(
-                    "CETK_DATABASE_PATH", "Database not set yet."
-                )
-                # Load codesets table
-                connection = sqlite3.connect(self.db_path)
-                cursor = connection.cursor()
-                cursor.execute("SELECT slug FROM codesets LIMIT 3")
-                codesets = [row[0] for row in cursor.fetchall()]
-                connection.close()
-                if len(codesets) > 0:
-                    codesetDialog = ChooseCodesetDialog(self, filename, codesets)
-                    codesetDialog.exec_()
-                else:
-                    # aggregating all substances when no codeset defined
-                    self.task = RunBackgroundTask(
-                        description="Aggregate emissions",
-                        function=run_aggregate_emissions,
-                        parent=self,
-                        filename=filename,
+            filename, _ = QFileDialog.getSaveFileName(
+                None, "Choose filename for aggregated emissions table", "", "(*.xlsx)"
+            )
+            if filename == "":
+                # user cancelled
+                message_box("Warning", "No file chosen, aggregated table not created.")
+            else:
+                if filename and not filename.endswith(".xlsx"):
+                    filename += ".xlsx"
+                try:
+                    self.db_path = os.environ.get(
+                        "CETK_DATABASE_PATH", "Database not set yet."
                     )
-                    QgsApplication.taskManager().addTask(self.task)
-            except CalledProcessError as e:
-                error = e.stderr.decode("utf-8")
-                message_box("Aggregation error", f"Error: {error}")
+                    # Load codesets table
+                    connection = sqlite3.connect(self.db_path)
+                    cursor = connection.cursor()
+                    cursor.execute("SELECT slug FROM codesets LIMIT 3")
+                    codesets = [row[0] for row in cursor.fetchall()]
+                    connection.close()
+                    if len(codesets) > 0:
+                        codesetDialog = ChooseCodesetDialog(self, filename, codesets)
+                        codesetDialog.exec_()
+                    else:
+                        # aggregating all substances when no codeset defined
+                        self.task = RunBackgroundTask(
+                            description="Aggregate emissions",
+                            function=run_aggregate_emissions,
+                            parent=self,
+                            filename=filename,
+                        )
+                        QgsApplication.taskManager().addTask(self.task)
+                except CalledProcessError as e:
+                    error = e.stderr.decode("utf-8")
+                    message_box("Aggregation error", f"Error: {error}")
 
     def rasterize_emissions_dialog(self):
-        self.outputpath = QFileDialog.getExistingDirectory(
-            None, "Choose output directory for raster NetCDF files"
-        )
-        if self.outputpath == "":
-            # user cancelled
-            message_box(
-                "Rasterize error", "No directory chosen, raster files not created."
-            )
+        if not has_db():
+            message_box("Error", "You have no database loaded.")
         else:
-            # Get a list of files in the directory
-            files_in_directory = os.listdir(self.outputpath)
-            # Filter the list to include only NetCDF files
-            netcdf_files = [file for file in files_in_directory if file.endswith(".nc")]
-            if netcdf_files:
+            self.outputpath = QFileDialog.getExistingDirectory(
+                None, "Choose output directory for raster NetCDF files"
+            )
+            if self.outputpath == "":
+                # user cancelled
                 message_box(
-                    "Rasterize",
-                    "NetCDF files already exist in provided output directory.\n"
-                    + "New rasters will be named after the substances in the emission inventory "
-                    + "(for example PM10.nc). Files cannot be overwritten, so if such files already exist, "
-                    + "create a new output directory.",
+                    "Rasterize error", "No directory chosen, raster files not created."
                 )
-                self.outputpath = QFileDialog.getExistingDirectory(
-                    None,
-                    "Choose output directory for raster NetCDF files, where no emissions rasters exist yet.",
-                )
-            try:
-                rasterDialog = RasterizeDialog(self)
-                result = rasterDialog.exec_()  # Show the dialog as a modal dialog
-                if result != QDialog.Accepted:
-                    # user cancelled
+            else:
+                # Get a list of files in the directory
+                files_in_directory = os.listdir(self.outputpath)
+                # Filter the list to include only NetCDF files
+                netcdf_files = [
+                    file for file in files_in_directory if file.endswith(".nc")
+                ]
+                if netcdf_files:
                     message_box(
-                        "Rasterize error",
-                        "No extent, srid and resolution defined, rasterization cancelled.",
+                        "Rasterize",
+                        "NetCDF files already exist in provided output directory.\n"
+                        + "New rasters will be named after the substances in the emission inventory "
+                        + "(for example PM10.nc). Files cannot be overwritten, so if such files already exist, "
+                        + "create a new output directory.",
                     )
-                    return
-                self.load_canvas = rasterDialog.load_to_canvas
-                if self.load_canvas:
-                    self.time_threshold = time.time()
-                if rasterDialog.date[0] != "":
-                    begin = datetime.datetime.strptime(rasterDialog.date[0], "%Y-%m-%d")
-                    end = datetime.datetime.strptime(rasterDialog.date[1], "%Y-%m-%d")
-                    self.task = RunBackgroundTask(
-                        description="Rasterize emissions",
-                        function=run_rasterize_emissions,
-                        parent=self,
-                        outputpath=self.outputpath,
-                        cellsize=rasterDialog.cell_size,
-                        extent=rasterDialog.extent,
-                        srid=rasterDialog.raster_srid,
-                        begin=begin,
-                        end=end,
+                    self.outputpath = QFileDialog.getExistingDirectory(
+                        None,
+                        "Choose output directory for raster NetCDF files, where no emissions rasters exist yet.",
                     )
+                try:
+                    rasterDialog = RasterizeDialog(self)
+                    result = rasterDialog.exec_()  # Show the dialog as a modal dialog
+                    if result != QDialog.Accepted:
+                        # user cancelled
+                        message_box(
+                            "Rasterize error",
+                            "No extent, srid and resolution defined, rasterization cancelled.",
+                        )
+                        return
+                    self.load_canvas = rasterDialog.load_to_canvas
+                    if self.load_canvas:
+                        self.time_threshold = time.time()
+                    if rasterDialog.date[0] != "":
+                        begin = datetime.datetime.strptime(
+                            rasterDialog.date[0], "%Y-%m-%d"
+                        )
+                        end = datetime.datetime.strptime(
+                            rasterDialog.date[1], "%Y-%m-%d"
+                        )
+                        self.task = RunBackgroundTask(
+                            description="Rasterize emissions",
+                            function=run_rasterize_emissions,
+                            parent=self,
+                            outputpath=self.outputpath,
+                            cellsize=rasterDialog.cell_size,
+                            extent=rasterDialog.extent,
+                            srid=rasterDialog.raster_srid,
+                            begin=begin,
+                            end=end,
+                        )
 
-                else:
-                    self.task = RunBackgroundTask(
-                        description="Rasterize emissions",
-                        function=run_rasterize_emissions,
-                        parent=self,
-                        outputpath=self.outputpath,
-                        cellsize=rasterDialog.cell_size,
-                        extent=rasterDialog.extent,
-                        srid=rasterDialog.raster_srid,
-                    )
+                    else:
+                        self.task = RunBackgroundTask(
+                            description="Rasterize emissions",
+                            function=run_rasterize_emissions,
+                            parent=self,
+                            outputpath=self.outputpath,
+                            cellsize=rasterDialog.cell_size,
+                            extent=rasterDialog.extent,
+                            srid=rasterDialog.raster_srid,
+                        )
 
-                QgsApplication.taskManager().addTask(self.task)
+                    QgsApplication.taskManager().addTask(self.task)
 
-            except CalledProcessError as e:
-                error = e.stderr.decode("utf-8")
-                message_box("Rasterize error", f"Error: {error}")
+                except CalledProcessError as e:
+                    error = e.stderr.decode("utf-8")
+                    message_box("Rasterize error", f"Error: {error}")
 
     def load_joined_pointsource_canvas(self):
         self.source_type = "point"
