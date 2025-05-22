@@ -51,7 +51,7 @@ from PyQt5.QtCore import pyqtSlot
 from PyQt5.QtCore import QUrl
 from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
 from PyQt5.QtCore import Qt
-from qgis.utils import iface
+from qgis import utils
 from qgis.core import (
     QgsVectorLayer,
     QgsProject,
@@ -74,6 +74,7 @@ import time
 
 import os
 import glob
+import shutil
 import sys
 import subprocess
 import site
@@ -301,6 +302,12 @@ class EclairDock(QDockWidget):
         layout_export.addWidget(btn_action_export_all)
         btn_action_export_all.clicked.connect(self.export_dialog)
 
+        label = QLabel("Export Excel template", self.tab_export)
+        layout_export.addWidget(label)
+        btn_action_export_template = QPushButton(" Export template file", self.tab_export)
+        layout_export.addWidget(btn_action_export_template)
+        btn_action_export_template.clicked.connect(self.export_template_dialog)
+
         # TODO
         # btn_action_export = QPushButton(" Export only pointsources", self.tab_export)
         # btn_action_export.setFont(italic_font)
@@ -501,7 +508,7 @@ class EclairDock(QDockWidget):
         # Get the active layer
         from qgis.core import QgsMapLayer
 
-        layer = iface.activeLayer()
+        layer = utils.iface.activeLayer()
 
         # Ensure the layer is a vector layer
         if (
@@ -590,6 +597,21 @@ class EclairDock(QDockWidget):
                     filename=filename,
                 )
                 QgsApplication.taskManager().addTask(self.task)
+
+    def export_template_dialog(self):
+        filename, _ = QFileDialog.getSaveFileName(
+            None, "Choose filename for template file", "", "(*.xlsx)"
+        )
+        if filename == "":
+            # user cancelled
+            message_box("Warning", "No *.xlsx file chosen, no template exported.")
+        else:
+            if filename and not filename.endswith(".xlsx"):
+                filename += ".xlsx"
+            # copy file in templates to the chosen location
+            template_path = os.path.join(utils.home_plugin_path, "eclair/template/template-all-sources.xlsx")
+            shutil.copy(template_path, filename)
+            message_box("Info", f"File saved to {filename}")
 
     def create_emission_table(self):
         # TODO catch exception if database does not have any emissions imported yet
@@ -1069,7 +1091,7 @@ class RasterizeDialog(QDialog):
         self.srid_input.setInputMask("99999")  # Max 5 integers
         self.srid_input.setMaximumWidth(150)
         # Initialize with current canvas CRS
-        canvas_crs = iface.mapCanvas().mapSettings().destinationCrs()
+        canvas_crs = utils.iface.mapCanvas().mapSettings().destinationCrs()
         canvas_epsg = int(canvas_crs.authid().split(":")[-1])
         default_epsg = settings.srid
         if canvas_epsg != 4326:
@@ -1086,7 +1108,7 @@ class RasterizeDialog(QDialog):
         extent_layout = QHBoxLayout()
         self.extent_input = {}
         self.extent_labels = ["x1:", "y1:", "x2:", "y2:"]
-        current_extent = iface.mapCanvas().extent()
+        current_extent = utils.iface.mapCanvas().extent()
         if canvas_epsg == 4326:
             # convert from degrees to default_epsg, raster coordinates have to be metric
             target_crs = QgsCoordinateReferenceSystem(default_epsg)
