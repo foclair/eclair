@@ -725,6 +725,7 @@ class EclairDock(QDockWidget):
                             srid=rasterDialog.raster_srid,
                             begin=begin,
                             end=end,
+                            codeset=rasterDialog.rasterize_sector,
                         )
 
                     else:
@@ -736,6 +737,7 @@ class EclairDock(QDockWidget):
                             cellsize=rasterDialog.cell_size,
                             extent=rasterDialog.extent,
                             srid=rasterDialog.raster_srid,
+                            codeset=rasterDialog.rasterize_sector,
                         )
 
                     QgsApplication.taskManager().addTask(self.task)
@@ -1168,10 +1170,42 @@ class RasterizeDialog(QDialog):
         layout.addLayout(date_layout)
 
         # Create checkbox
-        self.checkbox = QCheckBox("Load rasters to canvas after creation.")
-        self.checkbox.setChecked(True)  # Set initial state
-        layout.addWidget(self.checkbox)
+        self.checkbox_loadrasters = QCheckBox("Load rasters to canvas after creation.")
+        self.checkbox_loadrasters.setChecked(True)  # Set initial state
+        layout.addWidget(self.checkbox_loadrasters)
         self.setLayout(layout)
+
+        sector_label = QLabel(
+            "Emission sectors:"
+        )
+        layout.addWidget(sector_label)
+        sector_choice = QLabel("Calculate separate sectors for code tree:")
+        layout.addWidget(sector_choice)
+        try:
+            def rasterize_sector_change(val):
+                self.rasterize_sector = val
+            self.db_path = os.environ.get(
+                "CETK_DATABASE_PATH", "Database not set yet."
+            )
+            # Load codesets table
+            connection = sqlite3.connect(self.db_path)
+            cursor = connection.cursor()
+            cursor.execute("SELECT slug FROM codesets LIMIT 3")
+            codesets = [row[0] for row in cursor.fetchall()]
+            connection.close()
+            self.sector_combo = QComboBox(sector_choice)
+            self.rasterize_sector = None
+            self.sector_combo.addItem("No separation")
+            if len(codesets) > 0:
+                for code in codesets:
+                    self.sector_combo.addItem(code)
+                layout.addWidget(self.sector_combo)
+                self.setLayout(layout)
+            self.sector_combo.currentTextChanged.connect(rasterize_sector_change)
+
+        except CalledProcessError as e:
+            error = e.stderr.decode("utf-8")
+            message_box("Aggregation error", f"Error: {error}")
 
         # TODO let unit be user defined?
         btn_action_run_rasterizer = QPushButton("Create rasters")
@@ -1179,6 +1213,7 @@ class RasterizeDialog(QDialog):
         btn_action_run_rasterizer.clicked.connect(self.run_rasterizer)
 
     def run_rasterizer(self):
+        #message_box("Chosen sector", self.rasterize_sector)
         self.raster_srid = int(self.srid_input.text())
         if self.raster_srid < 1024 or self.raster_srid > 32767:
             message_box(
@@ -1250,7 +1285,7 @@ class RasterizeDialog(QDialog):
         # message_box("info",self.extent)
         # Store the state of the checkbox
 
-        self.load_to_canvas = self.checkbox.isChecked()
+        self.load_to_canvas = self.checkbox_loadrasters.isChecked()
         self.accept()
 
 
