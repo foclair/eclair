@@ -404,6 +404,7 @@ class EclairDock(QDockWidget):
         self.db_label.setText(
             f"Eclair is currently connected to database:\n {os.path.basename(db_path)}"
         )
+        super().setWindowTitle(f"ECLAIR ({os.path.basename(db_path)})")
         self.db_label.setToolTip(str(db_path))
         project.writeEntry("eclair", "database", db_path)
 
