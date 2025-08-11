@@ -610,7 +610,8 @@ class EclairDock(QDockWidget):
             if filename and not filename.endswith(".xlsx"):
                 filename += ".xlsx"
             # copy file in templates to the chosen location
-            template_path = os.path.join(utils.home_plugin_path, "eclair/template/template-all-sources.xlsx")
+            bpath = utils.pluginDirectory("eclair")
+            template_path = os.path.join(bpath, "template/template-all-sources.xlsx")
             shutil.copy(template_path, filename)
             message_box("Info", f"File saved to {filename}")
 
