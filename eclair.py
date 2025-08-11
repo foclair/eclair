@@ -1084,8 +1084,10 @@ class RasterizeDialog(QDialog):
         layout = QVBoxLayout()
         label = QLabel(
             "Define srid, extent and resolution of output raster."
-            + " Current (rounded) canvas extent and srid are pre-filled but can be adapted.\n"
-            + "Raster extent and resolution have to be provided in meters, not degrees (a raster with EPSG 4326 is not possible)."
+            + " Current canvas extent and srid are pre-filled but can be adapted.\n"
+            + " Raster extent and resolution have to be provided in same unit as the coordinate reference system\n"
+            + " of output raster (degrees for EPSG 4326 (lat/lon) or meters for local projections)\n"
+            + " The prefilled extent (x1, y1, x2 and y2) are rounded to 0.1 degrees (for EPSG 4326) or kilometers. "
         )
         layout.addWidget(label)
 
@@ -1097,11 +1099,8 @@ class RasterizeDialog(QDialog):
         # Initialize with current canvas CRS
         canvas_crs = utils.iface.mapCanvas().mapSettings().destinationCrs()
         canvas_epsg = int(canvas_crs.authid().split(":")[-1])
-        default_epsg = settings.srid
-        if canvas_epsg != 4326:
-            self.srid_input.setText(str(canvas_epsg))
-        else:
-            self.srid_input.setText(str(default_epsg))
+        # canvas_epsg != 4326:
+        self.srid_input.setText(str(canvas_epsg))
         layout.addWidget(self.srid_input)
 
         # TODO would be nice to have option 'smallest extent to cover all sources'
@@ -1113,20 +1112,21 @@ class RasterizeDialog(QDialog):
         self.extent_input = {}
         self.extent_labels = ["x1:", "y1:", "x2:", "y2:"]
         current_extent = utils.iface.mapCanvas().extent()
-        if canvas_epsg == 4326:
-            # convert from degrees to default_epsg, raster coordinates have to be metric
-            target_crs = QgsCoordinateReferenceSystem(default_epsg)
-            transform = QgsCoordinateTransform(
-                canvas_crs, target_crs, QgsProject.instance()
-            )
-            current_extent = transform.transform(current_extent)
 
-        current_corners = {
-            "x1:": floor(current_extent.xMinimum() / 1000) * 1000,
-            "y1:": floor(current_extent.yMinimum() / 1000) * 1000,
-            "x2:": ceil(current_extent.xMaximum() / 1000) * 1000,
-            "y2:": ceil(current_extent.yMaximum() / 1000) * 1000,
-        }
+        if canvas_epsg != 4326:
+            current_corners = {
+                "x1:": floor(current_extent.xMinimum() / 1000) * 1000,
+                "y1:": floor(current_extent.yMinimum() / 1000) * 1000,
+                "x2:": ceil(current_extent.xMaximum() / 1000) * 1000,
+                "y2:": ceil(current_extent.yMaximum() / 1000) * 1000,
+            }
+        else:
+            current_corners = {
+                "x1:": floor(current_extent.xMinimum() * 10) / 10,
+                "y1:": floor(current_extent.yMinimum() * 10) / 10,
+                "x2:": ceil(current_extent.xMaximum() * 10) / 10,
+                "y2:": ceil(current_extent.yMaximum() * 10) / 10,
+            }
 
         for label_text in self.extent_labels:
             label = QLabel(label_text)
@@ -1139,18 +1139,21 @@ class RasterizeDialog(QDialog):
         layout.addLayout(extent_layout)
 
         resolution_label = QLabel(
-            "Enter the desired resolution of the output extent, in meters:"
+            "Enter the desired resolution of the output extent, in same unit as coordinate reference system:"
         )
         layout.addWidget(resolution_label)
         resolution_layout = QHBoxLayout()
         self.resolution_input = {}
-        self.resolution_labels = ["resolution [m]"]
+        self.resolution_labels = ["resolution"]
         for label_text in self.resolution_labels:
             label = QLabel(label_text)
             resolution_layout.addWidget(label)
             line_edit = QLineEdit(self)
             line_edit.setValidator(QDoubleValidator())  # Set input mask for floats
-            line_edit.setText(str(1000))  # initialize to 1km res
+            if canvas_epsg != 4326:
+                line_edit.setText(str(1000))  # initialize to 1km res
+            else:
+                line_edit.setText(str(0.1))  # initialize to 0.1 degree res
             resolution_layout.addWidget(line_edit)
             self.resolution_input[label_text] = line_edit
         layout.addLayout(resolution_layout)

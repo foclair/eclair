@@ -143,3 +143,8 @@ Development is best done through plugin-reloader. Create a symlink to this direc
 ```
 mklink /D C:\OSGeo4W\apps\qgis\plugins\eclair %UserProfile%\eclair
 ```
+or for Linux
+```
+ln -s [YOUR CODE LOCATION]/eclair/ ~/.var/app/org.qgis.qgis/data/QGIS/QGIS3/profiles/default/python/plugins/eclair 
+```
+Restart QGIS after creating the symlink. Then Eclair should be in the list of installed plugins.
