@@ -132,6 +132,29 @@ import rasterio
 import processing
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+def patch_django_gdal():
+    import django
+    from django import contrib
+
+    libgdal_path = Path(django.__file__).parent / 'contrib' / 'gis' / 'gdal' / 'libgdal.py'
+    if not libgdal_path.exists():
+        print(f"libgdal.py not found at expected path: {libgdal_path}")
+        return
+    with open(libgdal_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    # Check if gdal311 is already in the list
+    if "'gdal311'" in content:
+        print("GDAL 3.11 already patched in libgdal.py")
+        return
+    print("Patching libgdal.py to add support for gdal311...")
+    # Inject 'gdal311' into the lib_names list
+    new_content = content.replace(
+        "lib_names = [",
+        "lib_names = ['gdal311', "
+    )
+    with open(libgdal_path, 'w', encoding='utf-8') as f:
+        f.write(new_content)
+
 if os.name != "nt":
     CETK_BINPATH = os.path.expanduser("~/.local/bin")
     os.environ["PATH"] += f":{CETK_BINPATH}"
@@ -140,9 +163,24 @@ else:
     OSGEO4W = r"C:\OSGeo4W"
     assert os.path.isdir(OSGEO4W), "Directory does not exist: " + OSGEO4W
     os.environ["OSGEO4W_ROOT"] = OSGEO4W
-    os.environ["GDAL_DATA"] = OSGEO4W + r"\share\gdal"
-    os.environ["PROJ_LIB"] = OSGEO4W + r"\share\proj"
+    gdal_data_path_1 = os.path.join(OSGEO4W, "share", "gdal")
+    gdal_data_path_2 = os.path.join(OSGEO4W, "apps", "gdal", "share", "gdal")
+
+    if os.path.isdir(gdal_data_path_1):
+        os.environ["GDAL_DATA"] = gdal_data_path_1
+    elif os.path.isdir(gdal_data_path_2):
+        os.environ["GDAL_DATA"] = gdal_data_path_2
+    else:
+        raise RuntimeError("GDAL_DATA directory not found!")
+    proj_path = OSGEO4W + r"\share\proj"
+    if os.path.isdir(proj_path):
+        os.environ["PROJ_LIB"] = proj_path
     os.environ["PATH"] = OSGEO4W + r"\bin;" + os.environ["PATH"]
+    pattern = r"c:\osgeo4w\bin\gdal*.dll"
+    matching_files = glob.glob(pattern)
+    if len(matching_files)==1 and '311' in matching_files[0]:
+        patch_django_gdal()
+
 
 
 from cetk.tools.utils import (
@@ -610,8 +648,11 @@ class EclairDock(QDockWidget):
             if filename and not filename.endswith(".xlsx"):
                 filename += ".xlsx"
             # copy file in templates to the chosen location
-            bpath = utils.pluginDirectory("eclair")
-            template_path = os.path.join(bpath, "template/template-all-sources.xlsx")
+            try:
+                bpath = utils.pluginDirectory("eclair")
+            except KeyError:
+                bpath = os.path.dirname(os.path.abspath(__file__))
+            template_path = os.path.join(bpath, "template","template-all-sources.xlsx")
             shutil.copy(template_path, filename)
             message_box("Info", f"File saved to {filename}")
 
