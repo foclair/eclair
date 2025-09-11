@@ -6,7 +6,7 @@
 name=ECLAIR: Emission CompiLation for AIR quality
 qgisMinimumVersion=3.0
 description=This plugin compiles emission data for air quality. Data can be imported, edited and exported.
-version=0.0
+version=0.1
 author=SMHI FO Luft
 email=foluftadmin@smhi.se
 
