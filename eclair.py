@@ -182,7 +182,8 @@ if os.name != "nt":
     os.environ["PATH"] += f":{CETK_BINPATH}"
     sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 else:
-    os.environ["OSGEO4W_ROOT"] = get_osgeo4w_root()
+    OSGEO4W = get_osgeo4w_root()
+    os.environ["OSGEO4W_ROOT"] =  OSGEO4W
     gdal_data_path_1 = os.path.join(OSGEO4W, "share", "gdal")
     gdal_data_path_2 = os.path.join(OSGEO4W, "apps", "gdal", "share", "gdal")
 
