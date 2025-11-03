@@ -155,14 +155,34 @@ def patch_django_gdal():
     with open(libgdal_path, 'w', encoding='utf-8') as f:
         f.write(new_content)
 
+def get_osgeo4w_root():
+    """
+    Return the OSGeo4W root directory if QGIS was installed via OSGeo4W.
+    Raise ValueError otherwise.
+    """
+    # 1. Check environment variable
+    osgeo4w_root = os.environ.get("OSGEO4W_ROOT")
+    if osgeo4w_root and os.path.isdir(osgeo4w_root):
+        return os.path.normpath(osgeo4w_root)
+
+    # 2. Derive from sys.prefix (works inside QGIS)
+    prefix = sys.prefix
+    if prefix and os.path.exists(prefix):
+        # Usually looks like C:\OSGeo4W64\apps\qgis\bin or similar
+        candidate = os.path.abspath(os.path.join(prefix, r"..\.."))
+        if os.path.isdir(candidate) and os.path.exists(os.path.join(candidate, "bin")):
+            return os.path.normpath(candidate)
+
+    # Nothing found
+    raise ValueError("Cannot find OSGEO4W. QGIS needs to be installed through OSGEO4W for eclair to run without problems.")
+    return None
+
 if os.name != "nt":
     CETK_BINPATH = os.path.expanduser("~/.local/bin")
     os.environ["PATH"] += f":{CETK_BINPATH}"
     sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 else:
-    OSGEO4W = r"C:\OSGeo4W"
-    assert os.path.isdir(OSGEO4W), "Directory does not exist: " + OSGEO4W
-    os.environ["OSGEO4W_ROOT"] = OSGEO4W
+    os.environ["OSGEO4W_ROOT"] = get_osgeo4w_root()
     gdal_data_path_1 = os.path.join(OSGEO4W, "share", "gdal")
     gdal_data_path_2 = os.path.join(OSGEO4W, "apps", "gdal", "share", "gdal")
 
