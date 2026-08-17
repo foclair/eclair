@@ -20,7 +20,7 @@
  ***************************************************************************/
 """
 
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QApplication,
     QAction,
     QWidget,
@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
 )
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
@@ -37,7 +37,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QComboBox,
 )
-from PyQt5.QtWidgets import (
+from qgis.PyQt.QtWidgets import (
     QFileDialog,
     QCheckBox,
     QRadioButton,
@@ -46,11 +46,11 @@ from PyQt5.QtWidgets import (
     QMainWindow,
     QLineEdit,
 )
-from PyQt5.QtCore import pyqtSlot
+from qgis.PyQt.QtCore import pyqtSlot
 
-from PyQt5.QtCore import QUrl
-from PyQt5.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
-from PyQt5.QtCore import Qt
+from qgis.PyQt.QtCore import QUrl
+from qgis.PyQt.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
+from qgis.PyQt.QtCore import Qt
 from qgis import utils
 from qgis.core import (
     QgsVectorLayer,
@@ -96,9 +96,9 @@ except:
             "Eclair dependencies not installed",
             "Do you want to install missing python modules? \r\n"
             "QGIS will be non-responsive for a while.",
-            QMessageBox.Ok | QMessageBox.Cancel,
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
         )
-        == QMessageBox.Ok
+        == QMessageBox.StandardButton.Ok
     ):
         try:
             subprocess.check_call(["python", "-m", "pip", "install", "cetk"])
@@ -111,7 +111,7 @@ except:
             )
         except Exception as e:
             error = e.stderr.decode("utf-8")
-            QgsMessageLog.logMessage(error, level=Qgis.Warning)
+            QgsMessageLog.logMessage(error, level=Qgis.MessageLevel.Warning)
             QMessageBox.information(
                 None,
                 "An error occurred",
@@ -252,7 +252,7 @@ class Eclair(QWidget):
         # Create or show the dock widget
         if self.dock_widget is None:
             self.dock_widget = EclairDock(self.iface.mainWindow())
-            self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dock_widget)
+            self.iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.dock_widget)
         self.dock_widget.show()
 
 
@@ -265,7 +265,7 @@ class EclairDock(QDockWidget):
             os.makedirs(os.path.dirname(get_template_db()), exist_ok=True)
             run_migrate()
 
-        self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
         # Create a main widget for the dock widget
         self.main_widget = QWidget(self)
         self.setWidget(self.main_widget)
@@ -274,7 +274,7 @@ class EclairDock(QDockWidget):
         self.tab_widget = QTabWidget(self.main_widget)
         layout.addWidget(self.tab_widget)
 
-        default_font = QFontDatabase.systemFont(QFontDatabase.GeneralFont)
+        default_font = QFontDatabase.systemFont(QFontDatabase.SystemFont.GeneralFont)
         italic_font = default_font
         italic_font.setItalic(True)
         # Create tabs
@@ -294,7 +294,7 @@ class EclairDock(QDockWidget):
 
         # Database
         layout_db = QVBoxLayout()
-        layout_db.setAlignment(Qt.AlignTop)
+        layout_db.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.tab_db.setLayout(layout_db)
         self.db_label = QLabel(self)
         self.update_db_label()
@@ -320,7 +320,7 @@ class EclairDock(QDockWidget):
 
         # Import
         layout_import = QVBoxLayout()
-        layout_import.setAlignment(Qt.AlignTop)
+        layout_import.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.tab_import.setLayout(layout_import)
         label = QLabel("Import data from Excel to your database:", self.tab_import)
         layout_import.addWidget(label)
@@ -337,7 +337,7 @@ class EclairDock(QDockWidget):
 
         # Edit
         layout_edit = QVBoxLayout()
-        layout_edit.setAlignment(Qt.AlignTop)
+        layout_edit.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.tab_edit.setLayout(layout_edit)
         label = QLabel(
             "Edit data using QGIS functionality, or delete selected sources "
@@ -353,7 +353,7 @@ class EclairDock(QDockWidget):
 
         # Export
         layout_export = QVBoxLayout()
-        layout_export.setAlignment(Qt.AlignTop)
+        layout_export.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.tab_export.setLayout(layout_export)
         label = QLabel("Export database to Excel", self.tab_export)
         layout_export.addWidget(label)
@@ -374,7 +374,7 @@ class EclairDock(QDockWidget):
 
         # Calculate emissions
         layout_calculate = QVBoxLayout()
-        layout_calculate.setAlignment(Qt.AlignTop)
+        layout_calculate.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.tab_calculate.setLayout(layout_calculate)
         label = QLabel(
             "Create a Excel file with aggregated emissions per sector.",
@@ -399,7 +399,7 @@ class EclairDock(QDockWidget):
 
         # Visualize emissions
         layout_visualize = QVBoxLayout()
-        layout_visualize.setAlignment(Qt.AlignTop)
+        layout_visualize.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.tab_visualize.setLayout(layout_visualize)
 
         label = QLabel(
@@ -536,8 +536,8 @@ class EclairDock(QDockWidget):
             workbook.close()
 
             checkboxDialog = CheckboxDialog(self, valid_sheets, self.dry_run)
-            result = checkboxDialog.exec_()  # Show the dialog as a modal dialog
-            if result == QDialog.Accepted:
+            result = checkboxDialog.exec()  # Show the dialog as a modal dialog
+            if result == QDialog.DialogCode.Accepted:
                 sheets = checkboxDialog.sheet_names
             else:
                 if self.dry_run:
@@ -574,7 +574,7 @@ class EclairDock(QDockWidget):
         if (
             layer is None
             or not isinstance(layer, QgsMapLayer)
-            or layer.type() != QgsMapLayer.VectorLayer
+            or layer.type() != QgsMapLayer.LayerType.VectorLayer
         ):
             message_box(
                 "Delete sources",
@@ -609,14 +609,14 @@ class EclairDock(QDockWidget):
         if selected_features:
             # Create a QMessageBox instance
             msg_box = QMessageBox()
-            msg_box.setIcon(QMessageBox.Question)
+            msg_box.setIcon(QMessageBox.Icon.Question)
             msg_box.setWindowTitle("Delete sources")
             msg_box.setText(
                 f"Are you sure you want to delete {len(selected_features)} features?"
             )
-            msg_box.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
             response = msg_box.exec()
-            if response == QMessageBox.Yes:
+            if response == QMessageBox.StandardButton.Yes:
                 feature_ids = [feat.id() for feat in selected_features]
                 stdout, stderr = run_delete_sources(short_sourcetype, feature_ids)
                 if "Successfully" in stdout.decode("utf-8"):
@@ -714,7 +714,7 @@ class EclairDock(QDockWidget):
                     connection.close()
                     if len(codesets) > 0:
                         codesetDialog = ChooseCodesetDialog(self, filename, codesets)
-                        codesetDialog.exec_()
+                        codesetDialog.exec()
                     else:
                         # aggregating all substances when no codeset defined
                         self.task = RunBackgroundTask(
@@ -761,8 +761,8 @@ class EclairDock(QDockWidget):
                     )
                 try:
                     rasterDialog = RasterizeDialog(self)
-                    result = rasterDialog.exec_()  # Show the dialog as a modal dialog
-                    if result != QDialog.Accepted:
+                    result = rasterDialog.exec()  # Show the dialog as a modal dialog
+                    if result != QDialog.DialogCode.Accepted:
                         # user cancelled
                         message_box(
                             "Rasterize error",
@@ -1069,7 +1069,7 @@ class EclairDock(QDockWidget):
     def show_srid_dialog(self):
         crs_dialog = QgsProjectionSelectionDialog()
         crs_dialog.setWindowTitle("Select default coordinate system for your database")
-        if crs_dialog.exec_():
+        if crs_dialog.exec():
             crs = crs_dialog.crs()
             epsg_code = crs.authid().split(":")[-1]
             return epsg_code
@@ -1087,7 +1087,7 @@ def message_box(title, text):
     msg_box = QMessageBox()
     msg_box.setWindowTitle(title)
     msg_box.setText(text)
-    msg_box.exec_()
+    msg_box.exec()
 
 
 class CheckboxDialog(QDialog):
@@ -1449,7 +1449,7 @@ class TableDialog(QDialog):
             # Resize the columns to fit the content
             tableWidget.resizeColumnsToContents()
             tableWidget.resizeRowsToContents()
-            tableWidget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            tableWidget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             # tableWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             margins = layout.contentsMargins()
             max_row_label_width = 0
@@ -1504,7 +1504,7 @@ def load_rasters_to_canvas(directory_path, time_threshold):
             raster_layer = QgsRasterLayer(full_path, raster_file, "gdal")
             # statistics band 1
             provider = raster_layer.dataProvider()
-            stats = provider.bandStatistics(1, QgsRasterBandStats.All)
+            stats = provider.bandStatistics(1, QgsRasterBandStats.Stats.All)
             # only visualize non-zero rasters:
             if stats.sum > 0:
                 # Add the raster layer to the project
@@ -1517,7 +1517,7 @@ MESSAGE_CATEGORY = "Eclair info"
 
 class RunImportTask(QgsTask):
     def __init__(self, description, file_path, sheets, dry_run=False):
-        super().__init__(description, QgsTask.CanCancel)
+        super().__init__(description, QgsTask.Flag.CanCancel)
         self.file_path = file_path
         self.sheets = sheets
         if "validation" in self.description():
@@ -1536,7 +1536,7 @@ class RunImportTask(QgsTask):
         Periodically test for isCanceled() to gracefully abort.
         Raising exceptions here will crash QGIS, raise them in self.finished instead.
         """
-        QgsMessageLog.logMessage("Started import task", MESSAGE_CATEGORY, Qgis.Info)
+        QgsMessageLog.logMessage("Started import task", MESSAGE_CATEGORY, Qgis.MessageLevel.Info)
         try:
             self.backup_path, self.proc = run_import(
                 self.file_path, self.sheets, dry_run=self.dry_run
@@ -1575,7 +1575,7 @@ class RunImportTask(QgsTask):
             QgsMessageLog.logMessage(
                 'Task "{name}" completed\n'.format(name=self.description()),
                 MESSAGE_CATEGORY,
-                Qgis.Success,
+                Qgis.MessageLevel.Success,
             )
 
             output_path = os.path.dirname(os.environ.get("CETK_DATABASE_PATH"))
@@ -1606,7 +1606,7 @@ class RunImportTask(QgsTask):
                     validation_msgs.append(l)
                 else:
                     error = True
-                    QgsMessageLog.logMessage(l, level=Qgis.Info)
+                    QgsMessageLog.logMessage(l, level=Qgis.MessageLevel.Info)
                 return error
 
             error = False
@@ -1664,7 +1664,7 @@ class RunImportTask(QgsTask):
                         "created or updated if file would be imported are summarized in table.",
                         changes,
                     )
-                tableDialog.exec_()
+                tableDialog.exec()
             else:
                 if error:
                     tableDialog = TableDialog(
@@ -1693,7 +1693,7 @@ class RunImportTask(QgsTask):
                         " Number of features created or updated summarized in table.",
                         changes,
                     )
-                tableDialog.exec_()
+                tableDialog.exec()
         else:
             if self.exception is None:
                 QgsMessageLog.logMessage(
@@ -1701,7 +1701,7 @@ class RunImportTask(QgsTask):
                     "exception (probably the task was manually "
                     "canceled by the user)".format(name=self.description()),
                     MESSAGE_CATEGORY,
-                    Qgis.Warning,
+                    Qgis.MessageLevel.Warning,
                 )
             else:
                 if type(self.exception) == str:
@@ -1726,14 +1726,14 @@ class RunImportTask(QgsTask):
 
     def cancel(self):
         QgsMessageLog.logMessage(
-            f"Task {self.description()} was canceled", MESSAGE_CATEGORY, Qgis.Info
+            f"Task {self.description()} was canceled", MESSAGE_CATEGORY, Qgis.MessageLevel.Info
         )
         super().cancel()
 
 
 class RunBackgroundTask(QgsTask):
     def __init__(self, description, function, parent, *args, **kwargs):
-        super().__init__(description, QgsTask.CanCancel)
+        super().__init__(description, QgsTask.Flag.CanCancel)
         self.function = function
         self.parent = parent
         self.args = args
@@ -1752,7 +1752,7 @@ class RunBackgroundTask(QgsTask):
         Raising exceptions here will crash QGIS, raise them in self.finished instead.
         """
         QgsMessageLog.logMessage(
-            f"Started task {self.description()}", MESSAGE_CATEGORY, Qgis.Info
+            f"Started task {self.description()}", MESSAGE_CATEGORY, Qgis.MessageLevel.Info
         )
         try:
             self.proc = self.function(*self.args, **self.kwargs)
@@ -1782,7 +1782,7 @@ class RunBackgroundTask(QgsTask):
         """
         if result:
             QgsMessageLog.logMessage(
-                f"Task {self.description()} completed", MESSAGE_CATEGORY, Qgis.Success
+                f"Task {self.description()} completed", MESSAGE_CATEGORY, Qgis.MessageLevel.Success
             )
             if "Rasterize emissions" in self.description():
                 if self.parent.load_canvas:
@@ -1798,7 +1798,7 @@ class RunBackgroundTask(QgsTask):
                     "exception (probably the task was manually "
                     "canceled by the user)",
                     MESSAGE_CATEGORY,
-                    Qgis.Warning,
+                    Qgis.MessageLevel.Warning,
                 )
             else:
                 if isinstance(self.exception, str):
@@ -1809,6 +1809,6 @@ class RunBackgroundTask(QgsTask):
 
     def cancel(self):
         QgsMessageLog.logMessage(
-            f"Task {self.description()} was canceled", MESSAGE_CATEGORY, Qgis.Info
+            f"Task {self.description()} was canceled", MESSAGE_CATEGORY, Qgis.MessageLevel.Info
         )
         super().cancel()
