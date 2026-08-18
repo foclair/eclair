@@ -488,21 +488,29 @@ class EclairDock(QDockWidget):
         if db_path == "":
             # user cancelled
             message_box("Warning", "No *.gpkg file chosen, database not created.")
-        else:
-            try:
-                epsg = self.show_srid_dialog()
-                proc = create_from_template(db_path)
-                os.environ["CETK_DATABASE_PATH"] = db_path
-                if epsg is not None:
-                    set_settings_srid(epsg)
-                self.update_db_label()
-                message_box(
-                    "Created database",
-                    f"Successfully created database {db_path} with coordinate system {epsg}",
-                )
-            except CalledProcessError as e:
-                error = e.stderr.decode("utf-8")
-                message_box("Create database error", f"Error: {error}")
+            return
+
+        epsg = self.show_srid_dialog()
+        if epsg is None:
+            # user cancelled
+            return
+        if not epsg:
+            # user did not select a coordinate system
+            message_box("Warning", "No coordinate system chosen, database not created.")
+            return
+
+        try:
+            proc = create_from_template(db_path)
+            os.environ["CETK_DATABASE_PATH"] = db_path
+            set_settings_srid(epsg)
+            self.update_db_label()
+            message_box(
+                "Created database",
+                f"Successfully created database {db_path} with coordinate system {epsg}",
+            )
+        except CalledProcessError as e:
+            error = e.stderr.decode("utf-8")
+            message_box("Create database error", f"Error: {error}")
 
     def edit_db_settings(self):
         # TODO, create command in cetk.tools.utils that fixes this
