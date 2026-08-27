@@ -128,6 +128,34 @@ Removing sources using QGIS functionality to edit layers is currently not possib
 ## Development
 
 In order to use, may have to create your own venv, install all requirements and cetk (which is not yet included in requirements.txt).
+
+0. Clone cetk and eclair
+
+1. Create a virtual environment
+
+> python3 -m venv .venv-qgis
+
+2. Enable system packages in .venv-qgis/pyvenv.cfg
+
+3. Activate the virtual environment
+
+> source .venv-qgis/bin/activate
+
+4. Install cetk inside the virtual environment
+
+> cd /home/.../cetk/
+> pip install -e .
+
+5. Add Eclair to QGIS4 via symbolic link
+
+> ln -s /home/.../eclair/ ~/.local/share/QGIS/QGIS4/profiles/default/python/plugins/eclair
+
+Important: you might use a different profile
+
+6. Start QGIS using the virtual environment
+
+> qgis
+
 If experience problems with template database, run following in QGIS Python console to find where template database is located:
 
 ```
