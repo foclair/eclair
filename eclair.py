@@ -988,7 +988,7 @@ class EclairDock(QDockWidget):
             display_name = db_name + "-RoadSource" + timestamp
         else:
             message_box(
-                "Warning", f"Cannot load layer, sourcetype {source_type} unknown."
+                "Warning", f"Cannot load layer, source type {self.source_type} unknown."
             )
 
         # Create parameters for join by doing join through processing toolbox,
@@ -1065,7 +1065,7 @@ class EclairDock(QDockWidget):
             display_name = db_name + "-RoadSource"
         else:
             message_box(
-                "Warning", f"Cannot load layer, sourcetype {source_type} unknown."
+                "Warning", f"Cannot load layer, source type {self.source_type} unknown."
             )
         geom_column = "geom"
         uri.setDataSource(schema, table, geom_column)
