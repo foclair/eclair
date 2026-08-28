@@ -525,6 +525,12 @@ class EclairDock(QDockWidget):
         self.import_sources_dialog()
 
     def import_sources_dialog(self):
+        # db_path is required later, so catch a missing path early
+        db_path = os.environ.get("CETK_DATABASE_PATH", "Database not set yet.")
+        if not os.path.exists(db_path):
+            message_box("Warning", "Eclair is not connected to a database.\nPlease go to 'DB Settings' and connect to a database first.")
+            return
+
         file_path, _ = QFileDialog.getOpenFileName(
             None,
             "Open spreadsheet with point- and/or areasource data file",
