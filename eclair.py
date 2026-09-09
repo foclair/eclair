@@ -478,7 +478,7 @@ class EclairDock(QDockWidget):
             os.environ["CETK_DATABASE_PATH"] = db_path
             self.update_db_label()
             message_box(
-                "Load database", f"Database succesfully chosen database {db_path}."
+                "Load database", f"Database succesfully chosen: {db_path}"
             )
 
     def create_new_database_dialog(self):
@@ -1592,7 +1592,6 @@ class RunImportTask(QgsTask):
                 Qgis.MessageLevel.Success,
             )
 
-            output_path = os.path.dirname(os.environ.get("CETK_DATABASE_PATH"))
             stdout_files = glob.glob(
                 os.path.join(gettempdir(), "cetk_import_*_stdout.log")
             )
@@ -1610,12 +1609,11 @@ class RunImportTask(QgsTask):
                 self.stderr_content = None
 
             validation_msgs = []
-            updates = []
 
             def handle_line(l):
                 error = False
-                if l.startswith("VALIDATION"):
-                    validation_msgs.append(l.split("VALIDATION:")[1].strip())
+                if l.startswith("VALIDATION:"):
+                    validation_msgs.append(l.removeprefix("VALIDATION:").strip())
                 elif l.startswith("ERROR"):
                     validation_msgs.append(l)
                 else:
@@ -1654,26 +1652,23 @@ class RunImportTask(QgsTask):
                     tableDialog = TableDialog(
                         self,
                         "Validation status",
-                        "Did not validate full file. \n "
-                        "Error occurred that could not be handled by validation \n"
-                        "Try to correct spreadsheet using error information below: \n ",
+                        "Validation was unsuccessful.\n"
+                        "Please address the errors below before importing the spreadsheet.\n",
                         os.linesep.join(traceback.split("\n")),
                     )
                 elif len(validation_msgs) > 0:
-                    # len_errors = len(validation_msgs) - 1
                     tableDialog = TableDialog(
                         self,
                         "Validation status",
-                        "Validated file successfully. \n "
-                        "Found errors, correct spreadsheet using error information "
-                        "given below before importing data: \n",
+                        "Validated file successfully.\n"
+                        "Please address the errors below before importing the spreadsheet.\n",
                         os.linesep.join(validation_msgs),
                     )
                 else:
                     tableDialog = TableDialog(
                         self,
                         "Validation status",
-                        "Validated file successfully. \n"
+                        "Validated file successfully.\n"
                         "No changes to database yet, but number of features to be "
                         "created or updated if file would be imported are summarized in table.",
                         changes,
@@ -1684,27 +1679,27 @@ class RunImportTask(QgsTask):
                     tableDialog = TableDialog(
                         self,
                         "Import status",
-                        "Did not import file successfully. \n "
-                        "Error occurred that could not be handled by Eclair. \n"
-                        "First validate the file, correct spreadsheet using error information  \n"
-                        "given below untill reaching a successful validation before importing data: \n",
+                        "Did not import file successfully.\n"
+                        "Error occurred that could not be handled by Eclair.\n"
+                        "First validate the file, correct spreadsheet using error information\n"
+                        "given below untill reaching a successful validation before importing data:\n",
                         os.linesep.join(traceback.split("\n")),
                     )
                 elif len(validation_msgs) > 0:
                     tableDialog = TableDialog(
                         self,
                         "Import status",
-                        "Did not import file successfully. \n "
-                        "Import stopped at error. First validate the file, correct spreadsheet using error information "
-                        "given below untill reaching a successful validation before importing data: \n",
+                        "Did not import file successfully.\n"
+                        "Import stopped at error. First validate the file, correct spreadsheet using error information\n"
+                        "given below untill reaching a successful validation before importing data:\n",
                         os.linesep.join(validation_msgs),
                     )
                 else:
                     tableDialog = TableDialog(
                         self,
                         "Import status",
-                        "Imported data successfully. \n"
-                        " Number of features created or updated summarized in table.",
+                        "Imported data successfully.\n"
+                        "Number of features created or updated summarized in table.",
                         changes,
                     )
                 tableDialog.exec()
