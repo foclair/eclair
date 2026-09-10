@@ -1295,7 +1295,11 @@ class RasterizeDialog(QDialog):
 
     def run_rasterizer(self):
         #message_box("Chosen sector", self.rasterize_sector)
-        self.raster_srid = int(self.srid_input.text())
+        try:
+            self.raster_srid = int(self.srid_input.text())
+        except ValueError:
+            self.raster_srid = 0    # catch exception and handle the error subsequently
+
         if self.raster_srid < 1024 or self.raster_srid > 32767:
             message_box(
                 "Rasterize error",
