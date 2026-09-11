@@ -1629,13 +1629,13 @@ class RunImportTask(QgsTask):
 
             if "successfully" in self.stderr_content:
                 if self.dry_run:
-                    changes = eval(
+                    changes = ast.literal_eval(
                         self.stderr_content.split("\n")[-2]
                         .split("validated")[1]
                         .strip()
                     )
                 else:
-                    changes = eval(
+                    changes = ast.literal_eval(
                         self.stderr_content.split("\n")[-2].split("imported")[1].strip()
                     )
             elif "Traceback" in self.stderr_content:
