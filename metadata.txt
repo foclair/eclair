@@ -7,7 +7,7 @@ name=ECLAIR: Emission CompiLation for AIR quality
 qgisMinimumVersion=3.0
 qgisMaximumVersion=4.99
 description=This plugin compiles emission data for air quality. Data can be imported, edited and exported.
-version=0.1
+version=1.0
 author=SMHI FO Luft
 email=foluftadmin@smhi.se
 
@@ -30,7 +30,7 @@ homepage=https://github.com/foclair/eclair
 category=Plugins
 # icon=icon.png # this is the logo shown in the plugin download manager, not in the toolbar!
 # experimental flag
-experimental=True
+experimental=False
 
 # deprecated flag (applies to the whole plugin, not just a single version)
 deprecated=False
