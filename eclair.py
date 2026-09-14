@@ -20,76 +20,59 @@
  ***************************************************************************/
 """
 
-from qgis.PyQt.QtWidgets import (
-    QApplication,
-    QAction,
-    QWidget,
-    QDockWidget,
-    QTableWidget,
-    QTableWidgetItem,
-)
-from qgis.PyQt.QtWidgets import (
-    QDialog,
-    QVBoxLayout,
-    QHBoxLayout,
-    QPushButton,
-    QLabel,
-    QMessageBox,
-    QComboBox,
-)
-from qgis.PyQt.QtWidgets import (
-    QFileDialog,
-    QCheckBox,
-    QRadioButton,
-    QButtonGroup,
-    QTabWidget,
-    QMainWindow,
-    QLineEdit,
-)
-from qgis.PyQt.QtCore import pyqtSlot
+import ast
+import datetime
+import glob
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+from math import ceil, floor
+from pathlib import Path
+from tempfile import gettempdir
 
-from qgis.PyQt.QtCore import QUrl
-from qgis.PyQt.QtGui import QDesktopServices, QFont, QFontDatabase, QDoubleValidator
-from qgis.PyQt.QtCore import Qt
+import processing  # Spatial data processing framework for QGIS
 from qgis import utils
 from qgis.core import (
-    QgsVectorLayer,
-    QgsProject,
-    QgsDataSourceUri,
-    QgsCoordinateReferenceSystem,
-    QgsRasterLayer,
-    QgsProviderRegistry,
-    QgsCoordinateTransform,
-    QgsVectorLayerJoinInfo,
-    QgsMessageLog,
-    QgsLayerTreeLayer,
     Qgis,
     QgsApplication,
-    QgsTask,
-    QgsSingleBandGrayRenderer,
+    QgsCoordinateReferenceSystem,
+    QgsDataSourceUri,
+    QgsLayerTreeLayer,
+    QgsMessageLog,
+    QgsProject,
     QgsRasterBandStats,
+    QgsRasterLayer,
+    QgsTask,
+    QgsVectorLayer,
 )
 from qgis.gui import QgsProjectionSelectionDialog
-import time
-
-import os
-import glob
-import shutil
-import sys
-import subprocess
-import site
-from math import ceil, floor
-import ast
-import re
-from pathlib import Path
-import datetime
-import json
-from tempfile import NamedTemporaryFile, gettempdir
-from osgeo import gdal
+from qgis.PyQt.QtCore import Qt, QUrl, pyqtSlot
+from qgis.PyQt.QtGui import QDesktopServices, QDoubleValidator, QFontDatabase
+from qgis.PyQt.QtWidgets import (
+    QAction,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDockWidget,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 try:
     from cetk.edb.const import SHEET_NAMES
-except:
+except ModuleNotFoundError:
     if (
         QMessageBox.question(
             None,
@@ -126,21 +109,32 @@ except:
         )
 
 
-import sqlite3
-import rasterio
+from cetk.db import run_migrate
+from cetk.tools.utils import (
+    CalledProcessError,
+    create_from_template,
+    get_template_db,
+    run_aggregate_emissions,
+    run_delete_sources,
+    run_export,
+    run_get_settings,
+    run_import,
+    run_rasterize_emissions,
+    run_update_emission_tables,
+    set_settings_srid,
+)
 
-import processing
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 def patch_django_gdal():
     import django
-    from django import contrib
 
-    libgdal_path = Path(django.__file__).parent / 'contrib' / 'gis' / 'gdal' / 'libgdal.py'
+    libgdal_path = (
+        Path(django.__file__).parent / "contrib" / "gis" / "gdal" / "libgdal.py"
+    )
     if not libgdal_path.exists():
         print(f"libgdal.py not found at expected path: {libgdal_path}")
         return
-    with open(libgdal_path, 'r', encoding='utf-8') as f:
+    with open(libgdal_path, "r", encoding="utf-8") as f:
         content = f.read()
     # Check if gdal311 is already in the list
     if "'gdal311'" in content:
@@ -148,12 +142,10 @@ def patch_django_gdal():
         return
     print("Patching libgdal.py to add support for gdal311...")
     # Inject 'gdal311' into the lib_names list
-    new_content = content.replace(
-        "lib_names = [",
-        "lib_names = ['gdal311', "
-    )
-    with open(libgdal_path, 'w', encoding='utf-8') as f:
+    new_content = content.replace("lib_names = [", "lib_names = ['gdal311', ")
+    with open(libgdal_path, "w", encoding="utf-8") as f:
         f.write(new_content)
+
 
 def get_osgeo4w_root():
     """
@@ -174,8 +166,11 @@ def get_osgeo4w_root():
             return os.path.normpath(candidate)
 
     # Nothing found
-    raise ValueError("Cannot find OSGEO4W. QGIS needs to be installed through OSGEO4W for eclair to run without problems.")
+    raise ValueError(
+        "Cannot find OSGEO4W. QGIS needs to be installed through OSGEO4W for eclair to run without problems."
+    )
     return None
+
 
 if os.name != "nt":
     CETK_BINPATH = os.path.expanduser("~/.local/bin")
@@ -183,7 +178,7 @@ if os.name != "nt":
     sys.path += [f"/home/{os.environ['USER']}/.local/lib/python3.9/site-packages"]
 else:
     OSGEO4W = get_osgeo4w_root()
-    os.environ["OSGEO4W_ROOT"] =  OSGEO4W
+    os.environ["OSGEO4W_ROOT"] = OSGEO4W
     gdal_data_path_1 = os.path.join(OSGEO4W, "share", "gdal")
     gdal_data_path_2 = os.path.join(OSGEO4W, "apps", "gdal", "share", "gdal")
 
@@ -199,25 +194,8 @@ else:
     os.environ["PATH"] = OSGEO4W + r"\bin;" + os.environ["PATH"]
     pattern = r"c:\osgeo4w\bin\gdal*.dll"
     matching_files = glob.glob(pattern)
-    if len(matching_files)==1 and '311' in matching_files[0]:
+    if len(matching_files) == 1 and "311" in matching_files[0]:
         patch_django_gdal()
-
-
-
-from cetk.tools.utils import (
-    CalledProcessError,
-    create_from_template,
-    get_template_db,
-    set_settings_srid,
-    run_import,
-    run_export,
-    run_update_emission_tables,
-    run_aggregate_emissions,
-    run_rasterize_emissions,
-    run_get_settings,
-    run_delete_sources,
-)
-from cetk.db import run_migrate
 
 
 def has_db():
@@ -252,7 +230,9 @@ class Eclair(QWidget):
         # Create or show the dock widget
         if self.dock_widget is None:
             self.dock_widget = EclairDock(self.iface.mainWindow())
-            self.iface.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.dock_widget)
+            self.iface.addDockWidget(
+                Qt.DockWidgetArea.LeftDockWidgetArea, self.dock_widget
+            )
         self.dock_widget.show()
 
 
@@ -265,7 +245,9 @@ class EclairDock(QDockWidget):
             os.makedirs(os.path.dirname(get_template_db()), exist_ok=True)
             run_migrate()
 
-        self.setAllowedAreas(Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea)
+        self.setAllowedAreas(
+            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
+        )
         # Create a main widget for the dock widget
         self.main_widget = QWidget(self)
         self.setWidget(self.main_widget)
@@ -363,7 +345,9 @@ class EclairDock(QDockWidget):
 
         label = QLabel("Export Excel template", self.tab_export)
         layout_export.addWidget(label)
-        btn_action_export_template = QPushButton(" Export template file", self.tab_export)
+        btn_action_export_template = QPushButton(
+            " Export template file", self.tab_export
+        )
         layout_export.addWidget(btn_action_export_template)
         btn_action_export_template.clicked.connect(self.export_template_dialog)
 
@@ -477,9 +461,7 @@ class EclairDock(QDockWidget):
         else:
             os.environ["CETK_DATABASE_PATH"] = db_path
             self.update_db_label()
-            message_box(
-                "Load database", f"Database succesfully chosen: {db_path}"
-            )
+            message_box("Load database", f"Database succesfully chosen: {db_path}")
 
     def create_new_database_dialog(self):
         db_path, _ = QFileDialog.getSaveFileName(
@@ -500,7 +482,7 @@ class EclairDock(QDockWidget):
             return
 
         try:
-            proc = create_from_template(db_path)
+            create_from_template(db_path)
             os.environ["CETK_DATABASE_PATH"] = db_path
             set_settings_srid(epsg)
             self.update_db_label()
@@ -528,7 +510,10 @@ class EclairDock(QDockWidget):
         # db_path is required later, so catch a missing path early
         db_path = os.environ.get("CETK_DATABASE_PATH", "Database not set yet.")
         if not os.path.exists(db_path):
-            message_box("Warning", "Eclair is not connected to a database.\nPlease go to 'DB Settings' and connect to a database first.")
+            message_box(
+                "Warning",
+                "Eclair is not connected to a database.\nPlease go to 'DB Settings' and connect to a database first.",
+            )
             return
 
         file_path, _ = QFileDialog.getOpenFileName(
@@ -628,7 +613,9 @@ class EclairDock(QDockWidget):
             msg_box.setText(
                 f"Are you sure you want to delete {len(selected_features)} features?"
             )
-            msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            msg_box.setStandardButtons(
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
             response = msg_box.exec()
             if response == QMessageBox.StandardButton.Yes:
                 feature_ids = [feat.id() for feat in selected_features]
@@ -687,7 +674,7 @@ class EclairDock(QDockWidget):
                 bpath = utils.pluginDirectory("eclair")
             except KeyError:
                 bpath = os.path.dirname(os.path.abspath(__file__))
-            template_path = os.path.join(bpath, "template","template-all-sources.xlsx")
+            template_path = os.path.join(bpath, "template", "template-all-sources.xlsx")
             shutil.copy(template_path, filename)
             message_box("Info", f"File saved to {filename}")
 
@@ -1067,7 +1054,7 @@ class EclairDock(QDockWidget):
             display_name = db_name + "-GridSource"
         elif self.source_type == "road":
             table = "edb_roadsource"
-            join_table = "roadsource_emissions"
+            # join_table = "roadsource_emissions"
             display_name = db_name + "-RoadSource"
         else:
             message_box(
@@ -1153,7 +1140,7 @@ class RasterizeDialog(QDialog):
         self.initUI()
 
     def initUI(self):
-        settings = run_get_settings()
+        run_get_settings()
 
         # Create a layout for the dialog
         self.setWindowTitle("Define rasterize settings")
@@ -1256,18 +1243,16 @@ class RasterizeDialog(QDialog):
         layout.addWidget(self.checkbox_loadrasters)
         self.setLayout(layout)
 
-        sector_label = QLabel(
-            "Emission sectors:"
-        )
+        sector_label = QLabel("Emission sectors:")
         layout.addWidget(sector_label)
         sector_choice = QLabel("Calculate separate sectors for code tree:")
         layout.addWidget(sector_choice)
         try:
+
             def rasterize_sector_change(val):
                 self.rasterize_sector = val
-            self.db_path = os.environ.get(
-                "CETK_DATABASE_PATH", "Database not set yet."
-            )
+
+            self.db_path = os.environ.get("CETK_DATABASE_PATH", "Database not set yet.")
             # Load codesets table
             connection = sqlite3.connect(self.db_path)
             cursor = connection.cursor()
@@ -1294,11 +1279,11 @@ class RasterizeDialog(QDialog):
         btn_action_run_rasterizer.clicked.connect(self.run_rasterizer)
 
     def run_rasterizer(self):
-        #message_box("Chosen sector", self.rasterize_sector)
+        # message_box("Chosen sector", self.rasterize_sector)
         try:
             self.raster_srid = int(self.srid_input.text())
         except ValueError:
-            self.raster_srid = 0    # catch exception and handle the error subsequently
+            self.raster_srid = 0  # catch exception and handle the error subsequently
 
         if self.raster_srid < 1024 or self.raster_srid > 32767:
             message_box(
@@ -1389,7 +1374,6 @@ class ChooseCodesetDialog(QDialog):
         label = QLabel(str(self.codesets))
         layout.addWidget(label)
 
-        layout_buttons = QHBoxLayout()
         for codeset_i in self.codesets:
             btn_action = QPushButton(codeset_i)
             layout.addWidget(btn_action)
@@ -1436,7 +1420,7 @@ class TableDialog(QDialog):
         label = QLabel(self.text)
         layout.addWidget(label)
 
-        if type(self.stdout) == dict:
+        if isinstance(self.stdout, dict):
             table_dict = self.stdout
 
             # TODO: do not know whether timevar is updated or created,
@@ -1467,7 +1451,9 @@ class TableDialog(QDialog):
             # Resize the columns to fit the content
             tableWidget.resizeColumnsToContents()
             tableWidget.resizeRowsToContents()
-            tableWidget.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            tableWidget.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
             # tableWidget.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
             margins = layout.contentsMargins()
             max_row_label_width = 0
@@ -1554,7 +1540,9 @@ class RunImportTask(QgsTask):
         Periodically test for isCanceled() to gracefully abort.
         Raising exceptions here will crash QGIS, raise them in self.finished instead.
         """
-        QgsMessageLog.logMessage("Started import task", MESSAGE_CATEGORY, Qgis.MessageLevel.Info)
+        QgsMessageLog.logMessage(
+            "Started import task", MESSAGE_CATEGORY, Qgis.MessageLevel.Info
+        )
         try:
             self.backup_path, self.proc = run_import(
                 self.file_path, self.sheets, dry_run=self.dry_run
@@ -1596,9 +1584,9 @@ class RunImportTask(QgsTask):
                 Qgis.MessageLevel.Success,
             )
 
-            stdout_files = glob.glob(
-                os.path.join(gettempdir(), "cetk_import_*_stdout.log")
-            )
+            # stdout_files = glob.glob(
+            #     os.path.join(gettempdir(), "cetk_import_*_stdout.log")
+            # )
             stderr_files = glob.glob(
                 os.path.join(gettempdir(), "cetk_import_*_stderr.log")
             )
@@ -1614,15 +1602,15 @@ class RunImportTask(QgsTask):
 
             validation_msgs = []
 
-            def handle_line(l):
+            def handle_line(line):
                 error = False
-                if l.startswith("VALIDATION:"):
-                    validation_msgs.append(l.removeprefix("VALIDATION:").strip())
-                elif l.startswith("ERROR"):
-                    validation_msgs.append(l)
+                if line.startswith("VALIDATION:"):
+                    validation_msgs.append(line.removeprefix("VALIDATION:").strip())
+                elif line.startswith("ERROR"):
+                    validation_msgs.append(line)
                 else:
                     error = True
-                    QgsMessageLog.logMessage(l, level=Qgis.MessageLevel.Info)
+                    QgsMessageLog.logMessage(line, level=Qgis.MessageLevel.Info)
                 return error
 
             error = False
@@ -1642,8 +1630,8 @@ class RunImportTask(QgsTask):
                 traceback = self.stderr_content
                 error = True
             else:
-                for l in self.stderr_content.split("\n"):
-                    error = handle_line(l)
+                for line in self.stderr_content.split("\n"):
+                    error = handle_line(line)
                 if error:
                     traceback = self.stderr_content
 
@@ -1717,7 +1705,7 @@ class RunImportTask(QgsTask):
                     Qgis.MessageLevel.Warning,
                 )
             else:
-                if type(self.exception) == str:
+                if isinstance(self.exception, str):
                     error = self.exception
                 else:
                     error = self.exception.stderr.decode("utf-8")
@@ -1727,7 +1715,7 @@ class RunImportTask(QgsTask):
                 ):
                     message_box(
                         "Error",
-                        f"Error: a target database is not specified yet,"
+                        "Error: a target database is not specified yet,"
                         + " choose an existing or create a new database first.",
                     )
                 else:
@@ -1739,7 +1727,9 @@ class RunImportTask(QgsTask):
 
     def cancel(self):
         QgsMessageLog.logMessage(
-            f"Task {self.description()} was canceled", MESSAGE_CATEGORY, Qgis.MessageLevel.Info
+            f"Task {self.description()} was canceled",
+            MESSAGE_CATEGORY,
+            Qgis.MessageLevel.Info,
         )
         super().cancel()
 
@@ -1765,7 +1755,9 @@ class RunBackgroundTask(QgsTask):
         Raising exceptions here will crash QGIS, raise them in self.finished instead.
         """
         QgsMessageLog.logMessage(
-            f"Started task {self.description()}", MESSAGE_CATEGORY, Qgis.MessageLevel.Info
+            f"Started task {self.description()}",
+            MESSAGE_CATEGORY,
+            Qgis.MessageLevel.Info,
         )
         try:
             self.proc = self.function(*self.args, **self.kwargs)
@@ -1795,7 +1787,9 @@ class RunBackgroundTask(QgsTask):
         """
         if result:
             QgsMessageLog.logMessage(
-                f"Task {self.description()} completed", MESSAGE_CATEGORY, Qgis.MessageLevel.Success
+                f"Task {self.description()} completed",
+                MESSAGE_CATEGORY,
+                Qgis.MessageLevel.Success,
             )
             if "Rasterize emissions" in self.description():
                 if self.parent.load_canvas:
@@ -1822,6 +1816,8 @@ class RunBackgroundTask(QgsTask):
 
     def cancel(self):
         QgsMessageLog.logMessage(
-            f"Task {self.description()} was canceled", MESSAGE_CATEGORY, Qgis.MessageLevel.Info
+            f"Task {self.description()} was canceled",
+            MESSAGE_CATEGORY,
+            Qgis.MessageLevel.Info,
         )
         super().cancel()
