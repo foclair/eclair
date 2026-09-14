@@ -26,7 +26,6 @@ import glob
 import os
 import shutil
 import sqlite3
-import subprocess
 import sys
 import time
 from math import ceil, floor
@@ -72,41 +71,13 @@ from qgis.PyQt.QtWidgets import (
 
 try:
     from cetk.edb.const import SHEET_NAMES
-except ModuleNotFoundError:
-    if (
-        QMessageBox.question(
-            None,
-            "Eclair dependencies not installed",
-            "Do you want to install missing python modules? \r\n"
-            "QGIS will be non-responsive for a while.",
-            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
-        )
-        == QMessageBox.StandardButton.Ok
-    ):
-        try:
-            subprocess.check_call(["python", "-m", "pip", "install", "cetk"])
-            from cetk.edb.const import SHEET_NAMES
-
-            QMessageBox.information(
-                None,
-                "Packages successfully installed",
-                "To make all parts of the plugin work it is recommended to restart your QGIS-session.",
-            )
-        except Exception as e:
-            error = e.stderr.decode("utf-8")
-            QgsMessageLog.logMessage(error, level=Qgis.MessageLevel.Warning)
-            QMessageBox.information(
-                None,
-                "An error occurred",
-                "Eclair couldn't install Python packages!\n"
-                "See 'General' tab in 'Log Messages' panel for details.\n",
-            )
-    else:
-        QMessageBox.information(
-            None,
-            "Information",
-            "Packages not installed. Eclair will not function unless cetk is installed manually, see https://github.com/foclair/cetk for installation instructions.",
-        )
+except ImportError:
+    QMessageBox.warning(
+        None,
+        "Warning - Eclair",
+        "Eclair will not function unless cetk is installed manually, see https://github.com/foclair/cetk for installation instructions.",
+    )
+    raise ImportError("The Eclair plugin requires the Python package 'cetk'.")
 
 
 from cetk.db import run_migrate
