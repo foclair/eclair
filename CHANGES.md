@@ -1,5 +1,9 @@
 # Change log
 
+## 1.1
+
+- Update cetk to version >=0.1.1
+
 ## 1.0
 
 - Added QGIS4 support
